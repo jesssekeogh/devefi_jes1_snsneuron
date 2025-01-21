@@ -1,0 +1,14 @@
+[package]
+name = "devefi-jes1-snsneuron"
+version = "0.1.0"
+description = "Stake SNS neurons and receive maturity directly to your destination"
+repository = "https://github.com/jesssekeogh/devefi_jes1_snsneuron"
+keywords = [ "devefi", "neuron", "stake", "sns" ]
+license = ""
+
+[dependencies]
+base = "0.13.3"
+neuro = "https://github.com/jesssekeogh/neuro#new_sns_update@cccf7024cc50c19b0627e157955ce5f88b974348"
+
+[dev-dependencies]
+devefi = "0.3.22"
