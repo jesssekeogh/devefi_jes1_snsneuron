@@ -14,9 +14,10 @@ module {
     public type SnsNodeMem = {
         init : {
             neuron_nonce : Nat64;
+            governance_canister : Principal;
+            neuron_creator : NeuronCreator;
         };
         variables : {
-            var neuron_type : SnsNeuronType;
             var dissolve_delay : SnsDissolveDelay;
             var dissolve_status : SnsDissolveStatus;
             var followee : SnsFollowee;
@@ -25,13 +26,14 @@ module {
             var updating : SnsNeuronUpdatingStatus;
             var refresh_idx : ?Nat64;
         };
-        cache : SnsNeuronCache;
+        neuron_cache : SnsNeuronCache;
+        parameters_cache : SnsParametersCache;
         var log : [SnsNeuronActivity];
     };
 
-    public type SnsNeuronType = {
+    public type NeuronCreator = {
         #Default;
-        #Transferred : { neuron_owner : Principal };
+        #External : Principal;
     };
 
     public type SnsDissolveDelay = {
@@ -91,4 +93,33 @@ module {
         var neuron_fees_e8s : ?Nat64;
     };
 
+    public type SnsParametersCache = {
+        var default_followees : ?{
+            followees : [(Nat64, { followees : [{ id : Blob }] })];
+        };
+        var max_dissolve_delay_seconds : ?Nat64;
+        var max_dissolve_delay_bonus_percentage : ?Nat64;
+        var max_followees_per_function : ?Nat64;
+        var neuron_claimer_permissions : ?{ permissions : [Int32] };
+        var neuron_minimum_stake_e8s : ?Nat64;
+        var max_neuron_age_for_age_bonus : ?Nat64;
+        var initial_voting_period_seconds : ?Nat64;
+        var neuron_minimum_dissolve_delay_to_vote_seconds : ?Nat64;
+        var reject_cost_e8s : ?Nat64;
+        var max_proposals_to_keep_per_action : ?Nat32;
+        var wait_for_quiet_deadline_increase_seconds : ?Nat64;
+        var max_number_of_neurons : ?Nat64;
+        var transaction_fee_e8s : ?Nat64;
+        var max_number_of_proposals_with_ballots : ?Nat64;
+        var max_age_bonus_percentage : ?Nat64;
+        var neuron_grantable_permissions : ?{ permissions : [Int32] };
+        var voting_rewards_parameters : ?{
+            final_reward_rate_basis_points : ?Nat64;
+            initial_reward_rate_basis_points : ?Nat64;
+            reward_rate_transition_duration_seconds : ?Nat64;
+            round_duration_seconds : ?Nat64;
+        };
+        var maturity_modulation_disabled : ?Bool;
+        var max_number_of_principals_per_neuron : ?Nat64;
+    };
 };
