@@ -41,10 +41,7 @@ module {
         #DelayDays : Nat64;
     };
 
-    public type SnsFollowee = {
-        #Default;
-        #FolloweeId : Blob;
-    };
+    public type SnsFollowee = Blob;
 
     public type SnsDissolveStatus = {
         #Dissolving;

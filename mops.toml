@@ -8,8 +8,8 @@ license = ""
 
 [dependencies]
 base = "0.13.3"
-neuro = "https://github.com/jesssekeogh/neuro#new_sns_update@c8729ac4d6ea14cec2abb74c05dafaee66b91d44"
-account-identifier = "1.0.2"
+map = "9.0.1"
+neuro = "0.7.3"
 
 [dev-dependencies]
 devefi = "0.3.22"

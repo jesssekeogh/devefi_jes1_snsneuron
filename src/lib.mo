@@ -4,18 +4,16 @@ import Map "mo:map/Map";
 import Nat64 "mo:base/Nat64";
 import Principal "mo:base/Principal";
 import Option "mo:base/Option";
-import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Error "mo:base/Error";
 import Buffer "mo:base/Buffer";
-import Iter "mo:base/Iter";
 import Nat32 "mo:base/Nat32";
+import Hex "mo:encoding/Hex";
 import Core "mo:devefi/core";
 import Ver1 "./memory/v1";
 import I "./interface";
 import { SNS } "mo:neuro";
 import Tools "mo:neuro/tools";
-import NodeUtil "mo:stableheapbtreemap/NodeUtil";
 
 module {
     let T = Core.VectorModule;
@@ -41,8 +39,44 @@ module {
 
         public type SnsNodeMem = Ver1.SnsNodeMem;
 
+        // Interval for cache check when no neuron refresh is pending.
+        let TIMEOUT_NANOS_NO_REFRESH_PENDING : Nat64 = (12 * 60 * 60 * 1_000_000_000); // every 12 hours
+
+        // Timeout interval for when a neuron refresh is pending.
+        let TIMEOUT_NANOS_REFRESH_PENDING : Nat64 = (5 * 60 * 1_000_000_000); // every 5 minutes
+
         // Maximum number of activities to keep in the main neuron's activity log
         let ACTIVITY_LOG_LIMIT : Nat = 10;
+
+        // Used to calculate days as seconds for delay inputs
+        let ONE_DAY_SECONDS : Nat64 = 24 * 60 * 60;
+
+        // Minimum allowable delay increase, defined as a buffer one week (in seconds)
+        let DELAY_BUFFER_SECONDS : Nat64 = (7 * ONE_DAY_SECONDS);
+
+        // From here: https://github.com/dfinity/ic/blob/master/rs/sns/governance/src/gen/ic_sns_governance.pb.v1.rs#L3829
+        let SNS_PERMISSIONS = {
+            Unspecified : Int32 = 0;
+            ConfigureDissolveState : Int32 = 1;
+            ManagePrincipals : Int32 = 2;
+            SubmitProposal : Int32 = 3;
+            Vote : Int32 = 4;
+            Disburse : Int32 = 5;
+            Split : Int32 = 6;
+            MergeMaturity : Int32 = 7;
+            DisburseMaturity : Int32 = 8;
+            StakeMaturity : Int32 = 9;
+            ManageVotingPermission : Int32 = 10;
+        };
+
+        // From here: https://github.com/dfinity/ic/blob/master/rs/sns/governance/src/types.rs#L85
+        // Critical proposals found here: https://github.com/dfinity/ic/blob/master/rs/sns/governance/src/types.rs#L1685
+        let SNS_ACTIONS : [Nat64] = [
+            0, // Catch all for non-critical proposals
+            9, // TRANSFER_SNS_TREASURY_FUNDS critical proposal
+            11, // DEREGISTER_DAPP_CANISTERS critical proposal
+            12, // MINT_SNS_TOKENS critical proposal
+        ];
 
         public func meta() : T.Meta {
             {
@@ -73,23 +107,82 @@ module {
         };
 
         public func run() : () {
-            label vec_loop for ((vid, nodeMem) in Map.entries(mem.main)) {};
+            label vec_loop for ((vid, nodeMem) in Map.entries(mem.main)) {
+                let ?vec = core.getNodeById(vid) else continue vec_loop;
+                if (not vec.active) continue vec_loop;
+                if (vec.billing.frozen) continue vec_loop; // don't run if frozen
+                if (Option.isSome(vec.billing.expires)) continue vec_loop; // don't allow staking until fee paid
+                Run.single(vid, vec, nodeMem);
+            };
         };
 
         public func runAsync() : async* () {
-            label vec_loop for ((vid, nodeMem) in Map.entries(mem.main)) {};
+            label vec_loop for ((vid, nodeMem) in Map.entries(mem.main)) {
+                let ?vec = core.getNodeById(vid) else continue vec_loop;
+                if (not vec.active) continue vec_loop;
+                if (vec.billing.frozen) continue vec_loop;
+                if (Option.isSome(vec.billing.expires)) continue vec_loop;
+                if (NodeUtils.node_ready(nodeMem)) {
+                    await* Run.singleAsync(vid, vec, nodeMem);
+                    return; // return after finding the first ready node
+                };
+            };
         };
 
         module Run {
-            // in run single you can send a small amount of tokens (below minimum stake) if it's external neuron too
-            // Todo figure how to get the minimum stake
             public func single(vid : T.NodeId, vec : T.NodeCoreMem, nodeMem : SnsNodeMem) : () {
+                let ?sourceStake = core.getSource(vid, vec, 0) else return;
+                let stakeBal = core.Source.balance(sourceStake);
+                let tokenFee = core.Source.fee(sourceStake);
+                let neuronSubaccount = Tools.computeNeuronStakingSubaccountBytes(core.getThisCan(), nodeMem.init.neuron_nonce);
 
+                // If a neuron exists or it's an external neuron, a smaller amount is required for increasing the existing stake.
+                // If no neuron exists, enforce the minimum stake requirement (plus fee) to create a new neuron.
+                let requiredStake = if (Option.isSome(nodeMem.neuron_cache.neuron_id) or NodeUtils.get_neuron_creator(nodeMem) != core.getThisCan()) {
+                    core.Source.fee(sourceStake);
+                } else {
+                    let ?MINIMUM_STAKE = nodeMem.parameters_cache.neuron_minimum_stake_e8s else return; // if parameters not cached, return
+
+                    Nat64.toNat(MINIMUM_STAKE) + tokenFee;
+                };
+
+                if (stakeBal > requiredStake) {
+                    // Proceed to send ICP to the neuron's subaccount
+                    let #ok(intent) = core.Source.Send.intent(
+                        sourceStake,
+                        #external_account({
+                            owner = nodeMem.init.governance_canister;
+                            subaccount = ?neuronSubaccount;
+                        }),
+                        stakeBal,
+                    ) else return;
+
+                    let txId = core.Source.Send.commit(intent);
+
+                    // Set refresh_idx to refresh or refresh the neuron in the next round
+                    NodeUtils.tx_sent(nodeMem, txId);
+                };
+
+                // forward all maturity
+                let ?sourceMaturity = core.getSource(vid, vec, 1) else return;
+                let maturityBal = core.Source.balance(sourceMaturity);
+
+                let #ok(intent) = core.Source.Send.intent(
+                    sourceMaturity,
+                    #destination({ port = 0 }),
+                    maturityBal,
+                ) else return;
+
+                ignore core.Source.Send.commit(intent);
             };
 
             public func singleAsync(vid : T.NodeId, vec : T.NodeCoreMem, nodeMem : SnsNodeMem) : async* () {
                 try {
                     await* NeuronActions.refresh_neuron(vec, nodeMem);
+                    await* NeuronActions.update_delay(nodeMem);
+                    await* NeuronActions.update_followees(nodeMem);
+                    await* NeuronActions.update_dissolving(nodeMem);
+                    await* NeuronActions.disburse_maturity(vec, vid, nodeMem);
                     await* CacheManager.refresh_neuron_cache(vec, nodeMem);
                     await* CacheManager.refresh_parameters_cache(vec, nodeMem);
                 } catch (err) {
@@ -254,7 +347,12 @@ module {
                 variables = {
                     dissolve_delay = #Default;
                     dissolve_status = #Locked;
-                    followee = #Default;
+                    followee = switch (Hex.decode("824f1a1df2652fb26c0fe1c03ab5ce69f2561570fb4d042cdc32dcb4604a4f03")) {
+                        case (#ok(decoded)) { Blob.fromArray(decoded) };
+                        case (#err(_)) {
+                            U.trap("Failed to decode default followee");
+                        };
+                    };
                 };
             };
         };
@@ -268,8 +366,43 @@ module {
         };
 
         module NodeUtils {
+            public func node_authorized(nodeMem : SnsNodeMem, requestedPermission : Int32) : Bool {
+                label permissionLoop for (permissions in nodeMem.neuron_cache.permissions.vals()) {
+                    let ?principal = permissions.principal else continue permissionLoop;
 
-            // we need a function that checks for permissions for every call
+                    if (principal == core.getThisCan()) {
+                        for (permission in permissions.permission_type.vals()) {
+                            if (permission == requestedPermission) return true;
+                        };
+                    };
+                };
+
+                return false;
+            };
+
+            public func node_ready(nodeMem : SnsNodeMem) : Bool {
+                // Determine the appropriate timeout based on whether the neuron should be refreshed
+                let timeout = if (node_needs_refresh(nodeMem)) {
+                    TIMEOUT_NANOS_REFRESH_PENDING;
+                } else {
+                    TIMEOUT_NANOS_NO_REFRESH_PENDING;
+                };
+
+                switch (nodeMem.internals.updating) {
+                    case (#Init) {
+                        nodeMem.internals.updating := #Calling(U.now());
+                        return true;
+                    };
+                    case (#Calling(ts) or #Done(ts)) {
+                        if (U.now() >= ts + timeout) {
+                            nodeMem.internals.updating := #Calling(U.now());
+                            return true;
+                        } else {
+                            return false;
+                        };
+                    };
+                };
+            };
 
             public func get_neuron_creator(nodeMem : SnsNodeMem) : Principal {
                 switch (nodeMem.init.neuron_creator) {
@@ -282,8 +415,22 @@ module {
                 };
             };
 
+            private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
+                return (
+                    Option.isSome(nodeMem.internals.refresh_idx) or
+                    Option.isNull(nodeMem.parameters_cache.neuron_minimum_stake_e8s) or
+                    CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) or
+                    CacheManager.dissolving_changed(nodeMem) or
+                    CacheManager.delay_changed(nodeMem)
+                );
+            };
+
             public func node_done(nodeMem : SnsNodeMem) : () {
                 nodeMem.internals.updating := #Done(U.now());
+            };
+
+            public func tx_sent(nodeMem : SnsNodeMem, txId : Nat64) : () {
+                nodeMem.internals.refresh_idx := ?txId;
             };
 
             public func log_activity(nodeMem : SnsNodeMem, operation : Text, result : { #Ok; #Err : Text }) : () {
@@ -339,7 +486,7 @@ module {
             };
 
             public func refresh_parameters_cache(vec : T.NodeCoreMem, nodeMem : SnsNodeMem) : async* () {
-                if (Option.isSome(nodeMem.parameters_cache.neuron_minimum_stake_e8s)) return; // only calls this once
+                if (Option.isSome(nodeMem.parameters_cache.neuron_minimum_stake_e8s)) return; // return if present
 
                 let neuronLedger = U.onlyICLedger(vec.ledgers[0]);
 
@@ -371,6 +518,58 @@ module {
                 nodeMem.parameters_cache.voting_rewards_parameters := parameters.voting_rewards_parameters;
                 nodeMem.parameters_cache.maturity_modulation_disabled := parameters.maturity_modulation_disabled;
                 nodeMem.parameters_cache.max_number_of_principals_per_neuron := parameters.max_number_of_principals_per_neuron;
+            };
+
+            public func delay_changed(nodeMem : SnsNodeMem) : Bool {
+                switch (nodeMem.variables.dissolve_status) {
+                    case (#Dissolving) {
+                        return false; // don't update delay if dissolving
+                    };
+                    case (#Locked) {
+                        let ?#DissolveDelaySeconds(cachedDelay) = nodeMem.neuron_cache.dissolve_state else return false; // neuron is dissolving
+                        let ?minimumDelay = nodeMem.parameters_cache.neuron_minimum_dissolve_delay_to_vote_seconds else return false;
+
+                        let delayToSet : Nat64 = switch (nodeMem.variables.dissolve_delay) {
+                            case (#Default) { minimumDelay };
+                            case (#DelayDays(days)) { days * ONE_DAY_SECONDS };
+                        };
+
+                        return delayToSet > cachedDelay + DELAY_BUFFER_SECONDS;
+                    };
+                };
+            };
+
+            public func followee_changed(nodeMem : SnsNodeMem, functionId : Nat64) : Bool {
+                let currentFollowees = Map.fromIter<Nat64, { followees : [{ id : Blob }] }>(nodeMem.neuron_cache.followees.vals(), Map.n64hash);
+
+                switch (Map.get(currentFollowees, Map.n64hash, functionId)) {
+                    case (?{ followees }) {
+                        for (followee in followees.vals()) {
+                            if (followee.id == nodeMem.variables.followee) return false;
+                        };
+
+                        return true // couldn't find the followee in there
+                    };
+                    case _ { return true };
+                };
+            };
+
+            public func dissolving_changed(nodeMem : SnsNodeMem) : Bool {
+                let ?dissolveState = nodeMem.neuron_cache.dissolve_state else return false;
+
+                let isDissolving = switch (dissolveState) {
+                    case (#DissolveDelaySeconds(_)) { false };
+                    case (#WhenDissolvedTimestampSeconds(_)) { true };
+                };
+
+                switch (nodeMem.variables.dissolve_status) {
+                    case (#Dissolving) {
+                        return not isDissolving;
+                    };
+                    case (#Locked) {
+                        return isDissolving;
+                    };
+                };
             };
         };
 
@@ -412,6 +611,147 @@ module {
                 };
             };
 
+            public func update_delay(nodeMem : SnsNodeMem) : async* () {
+                let ?neuron_id = nodeMem.neuron_cache.neuron_id else return;
+
+                if (CacheManager.delay_changed(nodeMem)) {
+                    if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.ConfigureDissolveState)) {
+                        return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.ConfigureDissolveState));
+                    };
+
+                    let neuron = SNS.Neuron({
+                        sns_canister_id = nodeMem.init.governance_canister;
+                        neuron_id = neuron_id;
+                    });
+
+                    let nowSecs = U.now() / 1_000_000_000;
+
+                    let ?minimumDelay = nodeMem.parameters_cache.neuron_minimum_dissolve_delay_to_vote_seconds else return;
+                    let ?maximumDelay = nodeMem.parameters_cache.max_dissolve_delay_seconds else return;
+
+                    let delayToSet : Nat64 = switch (nodeMem.variables.dissolve_delay) {
+                        case (#Default) { minimumDelay };
+                        case (#DelayDays(days)) { days * ONE_DAY_SECONDS };
+                    };
+
+                    let cleanedDelay = Nat64.min(
+                        Nat64.max(delayToSet, minimumDelay),
+                        maximumDelay,
+                    );
+
+                    // Store the original delay in nodeMem, keeping it at the max if applicable
+                    nodeMem.variables.dissolve_delay := #DelayDays(cleanedDelay / ONE_DAY_SECONDS);
+
+                    switch (await* neuron.setDissolveTimestamp({ dissolve_timestamp_seconds = nowSecs + cleanedDelay })) {
+                        case (#ok(_)) {
+                            NodeUtils.log_activity(nodeMem, "update_delay", #Ok);
+                        };
+                        case (#err(err)) {
+                            NodeUtils.log_activity(nodeMem, "update_delay", #Err(debug_show err));
+                        };
+                    };
+                };
+            };
+
+            public func update_followees(nodeMem : SnsNodeMem) : async* () {
+                let ?neuron_id = nodeMem.neuron_cache.neuron_id else return;
+
+                for (functionId in SNS_ACTIONS.vals()) {
+                    if (CacheManager.followee_changed(nodeMem, functionId)) {
+                        if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.Vote)) {
+                            return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.Vote));
+                        };
+
+                        let neuron = SNS.Neuron({
+                            sns_canister_id = nodeMem.init.governance_canister;
+                            neuron_id = neuron_id;
+                        });
+
+                        switch (await* neuron.follow({ followee = nodeMem.variables.followee; function_id = functionId })) {
+                            case (#ok(_)) {
+                                NodeUtils.log_activity(nodeMem, "update_followees", #Ok);
+                            };
+                            case (#err(err)) {
+                                NodeUtils.log_activity(nodeMem, "update_followees", #Err(debug_show err));
+                            };
+                        };
+                    };
+                };
+            };
+
+            public func update_dissolving(nodeMem : SnsNodeMem) : async* () {
+                let ?neuron_id = nodeMem.neuron_cache.neuron_id else return;
+
+                if (CacheManager.dissolving_changed(nodeMem)) {
+                    if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.ConfigureDissolveState)) {
+                        return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.ConfigureDissolveState));
+                    };
+
+                    let neuron = SNS.Neuron({
+                        sns_canister_id = nodeMem.init.governance_canister;
+                        neuron_id = neuron_id;
+                    });
+
+                    switch (nodeMem.variables.dissolve_status) {
+                        case (#Dissolving) {
+                            switch (await* neuron.startDissolving()) {
+                                case (#ok(_)) {
+                                    NodeUtils.log_activity(nodeMem, "start_dissolving", #Ok);
+                                };
+                                case (#err(err)) {
+                                    NodeUtils.log_activity(nodeMem, "start_dissolving", #Err(debug_show err));
+                                };
+                            };
+                        };
+                        case (#Locked) {
+                            switch (await* neuron.stopDissolving()) {
+                                case (#ok(_)) {
+                                    NodeUtils.log_activity(nodeMem, "stop_dissolving", #Ok);
+                                };
+                                case (#err(err)) {
+                                    NodeUtils.log_activity(nodeMem, "stop_dissolving", #Err(debug_show err));
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+
+            public func disburse_maturity(vec : T.NodeCoreMem, vid : T.NodeId, nodeMem : SnsNodeMem) : async* () {
+                let ?neuron_id = nodeMem.neuron_cache.neuron_id else return;
+                let ?cachedMaturity = nodeMem.neuron_cache.maturity_e8s_equivalent else return;
+                let ?sourceMaturity = core.getSource(vid, vec, 1) else return;
+                let tokenFee = core.Source.fee(sourceMaturity);
+
+                if (cachedMaturity > Nat64.fromNat(tokenFee)) {
+                    if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.DisburseMaturity)) {
+                        return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.DisburseMaturity));
+                    };
+
+                    // send maturity to the maturity source
+                    let ?{ owner; subaccount } = core.getSourceAccountIC(vec, 1) else return;
+
+                    // formatting for SNS Account
+                    let useSubaccount : ?{ subaccount : Blob } = switch (subaccount) {
+                        case (?sub) { ?{ subaccount = sub } };
+                        case (_) { null };
+                    };
+
+                    let neuron = SNS.Neuron({
+                        sns_canister_id = nodeMem.init.governance_canister;
+                        neuron_id = neuron_id;
+                    });
+
+                    switch (await* neuron.disburseMaturity({ percentage_to_disburse = 100; to_account = ?{ owner = ?owner; subaccount = useSubaccount } })) {
+                        case (#ok(_)) {
+                            NodeUtils.log_activity(nodeMem, "disburse_maturity", #Ok);
+                        };
+                        case (#err(err)) {
+                            NodeUtils.log_activity(nodeMem, "disburse_maturity", #Err(debug_show err));
+                        };
+                    };
+                };
+            };
         };
     };
 
