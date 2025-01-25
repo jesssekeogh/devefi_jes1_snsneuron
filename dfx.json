@@ -1,8 +1,16 @@
 {
   "canisters": {
-    "devefi_jes1_snsneuron_backend": {
-      "main": "src/devefi_jes1_snsneuron_backend/main.mo",
-      "type": "motoko"
+    "sns_test_pylon": {
+      "main": "tests/pylon/main.mo",
+      "type": "motoko",
+      "gzip": true,
+      "declarations": {
+        "node_compatibility": true,
+        "output": "tests/pic/setup/sns_test_pylon/declarations"
+      },
+      "post_install": [
+        "cp .dfx/ic/canisters/sns_test_pylon/sns_test_pylon.wasm.gz tests/pic/setup/sns_test_pylon"
+      ]
     }
   },
   "defaults": {
