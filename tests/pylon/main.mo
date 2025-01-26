@@ -1,5 +1,4 @@
 import Principal "mo:base/Principal";
-import Option "mo:base/Option";
 import Rechain "mo:rechain";
 import RT "./rechain";
 import Timer "mo:base/Timer";
@@ -11,7 +10,9 @@ import ICRC55 "mo:devefi/ICRC55";
 import VecSnsNeuron "../../src";
 import Core "mo:devefi/core";
 
-actor class (DFV_SETTINGS : ?Core.SETTINGS) = this {
+// TDOD track the spawned SNS ledger from the tests
+
+actor class SNSTESTPYLON() = this {
 
     let me_can = Principal.fromActor(this);
     stable let chain_mem = Rechain.Mem.Rechain.V1.new();
@@ -37,38 +38,35 @@ actor class (DFV_SETTINGS : ?Core.SETTINGS) = this {
 
     let core = Core.Mod<system>({
         xmem = mem_core_1;
-        settings = Option.get(
-            DFV_SETTINGS,
-            {
-                PYLON_NAME = "Neuron";
-                PYLON_GOVERNED_BY = "Neutrinite DAO";
-                BILLING = {
-                    ledger = Principal.fromText("f54if-eqaaa-aaaaq-aacea-cai");
-                    min_create_balance = 50000000;
-                    operation_cost = 20_000;
-                    freezing_threshold_days = 10;
-                    exempt_daily_cost_balance = null;
-                    split = {
-                        platform = 20;
-                        pylon = 20;
-                        author = 40;
-                        affiliate = 20;
-                    };
-                    pylon_account = {
-                        owner = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
-                        subaccount = null;
-                    };
-                    platform_account = {
-                        owner = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
-                        subaccount = null;
-                    };
+        settings = {
+            PYLON_NAME = "Neuron";
+            PYLON_GOVERNED_BY = "Neutrinite DAO";
+            BILLING = {
+                ledger = Principal.fromText("f54if-eqaaa-aaaaq-aacea-cai");
+                min_create_balance = 50000000;
+                operation_cost = 20_000;
+                freezing_threshold_days = 10;
+                exempt_daily_cost_balance = null;
+                split = {
+                    platform = 20;
+                    pylon = 20;
+                    author = 40;
+                    affiliate = 20;
                 };
-                TEMP_NODE_EXPIRATION_SEC = 3600;
-                MAX_INSTRUCTIONS_PER_HEARTBEAT = 300_000_000;
-                REQUEST_MAX_EXPIRE_SEC = 3600;
-                ALLOW_TEMP_NODE_CREATION = false;
-            } : Core.SETTINGS,
-        );
+                pylon_account = {
+                    owner = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
+                    subaccount = null;
+                };
+                platform_account = {
+                    owner = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
+                    subaccount = null;
+                };
+            };
+            TEMP_NODE_EXPIRATION_SEC = 3600;
+            MAX_INSTRUCTIONS_PER_HEARTBEAT = 300_000_000;
+            REQUEST_MAX_EXPIRE_SEC = 3600;
+            ALLOW_TEMP_NODE_CREATION = false;
+        } : Core.SETTINGS;
         dvf;
         chain;
         me_can;
@@ -76,8 +74,11 @@ actor class (DFV_SETTINGS : ?Core.SETTINGS) = this {
 
     // Vector modules
     stable let mem_vec_snsneuron_1 = VecSnsNeuron.Mem.Vector.V1.new();
-    
-    let devefi_jes1_snsneuron = VecSnsNeuron.Mod({ xmem = mem_vec_snsneuron_1; core; });
+
+    let devefi_jes1_snsneuron = VecSnsNeuron.Mod({
+        xmem = mem_vec_snsneuron_1;
+        core;
+    });
 
     let vmod = T.VectorModules({ devefi_jes1_snsneuron });
 
@@ -91,7 +92,9 @@ actor class (DFV_SETTINGS : ?Core.SETTINGS) = this {
 
     private func proc() { devefi_jes1_snsneuron.run() };
 
-    private func async_proc() : async* () { await* devefi_jes1_snsneuron.runAsync() };
+    private func async_proc() : async* () {
+        await* devefi_jes1_snsneuron.runAsync();
+    };
 
     ignore Timer.recurringTimer<system>(
         #seconds 30,
@@ -124,9 +127,9 @@ actor class (DFV_SETTINGS : ?Core.SETTINGS) = this {
     };
 
     public query func icrc55_command_validate(req : ICRC55.BatchCommandRequest<T.CreateRequest, T.ModifyRequest>) : async ICRC55.ValidationResult {
-        #Ok(debug_show(req));
+        #Ok(debug_show (req));
     };
-    
+
     public query func icrc55_get_nodes(req : [ICRC55.GetNode]) : async [?MU_sys.NodeShared<T.Shared>] {
         sys.icrc55_get_nodes(req);
     };
