@@ -15,12 +15,12 @@ module {
         init : {
             neuron_nonce : Nat64;
             governance_canister : Principal;
-            neuron_creator : NeuronCreator;
+            neuron_creator : ?Principal;
         };
         variables : {
-            var dissolve_delay : SnsDissolveDelay;
-            var dissolve_status : SnsDissolveStatus;
-            var followee : SnsFollowee;
+            var dissolve_delay : ?SnsDissolveDelay;
+            var dissolve_status : ?SnsDissolveStatus;
+            var followee : ?SnsFollowee;
         };
         internals : {
             var updating : SnsNeuronUpdatingStatus;
@@ -31,22 +31,17 @@ module {
         var log : [SnsNeuronActivity];
     };
 
-    public type NeuronCreator = {
-        #Default;
-        #External : Principal;
-    };
-
     public type SnsDissolveDelay = {
         #Default;
         #DelayDays : Nat64;
     };
 
-    public type SnsFollowee = Blob;
-
     public type SnsDissolveStatus = {
         #Dissolving;
         #Locked;
     };
+    
+    public type SnsFollowee = Blob;
 
     public type SnsNeuronUpdatingStatus = {
         #Init;
