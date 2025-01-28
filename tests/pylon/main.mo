@@ -10,8 +10,6 @@ import ICRC55 "mo:devefi/ICRC55";
 import VecSnsNeuron "../../src";
 import Core "mo:devefi/core";
 
-// TDOD track the spawned SNS ledger from the tests
-
 actor class SNSTESTPYLON() = this {
 
     let me_can = Principal.fromActor(this);
@@ -36,13 +34,16 @@ actor class SNSTESTPYLON() = this {
 
     stable let mem_core_1 = Core.Mem.Core.V1.new();
 
+    let sns_icrc_1 : Principal = Principal.fromText("75lp5-u7777-77776-qaaba-cai");
+    dvf.add_ledger<system>(sns_icrc_1, #icrc);
+
     let core = Core.Mod<system>({
         xmem = mem_core_1;
         settings = {
             PYLON_NAME = "Neuron";
             PYLON_GOVERNED_BY = "Neutrinite DAO";
             BILLING = {
-                ledger = Principal.fromText("f54if-eqaaa-aaaaq-aacea-cai");
+                ledger = sns_icrc_1;
                 min_create_balance = 50000000;
                 operation_cost = 20_000;
                 freezing_threshold_days = 10;

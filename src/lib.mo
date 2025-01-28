@@ -91,7 +91,7 @@ module {
                 ];
                 billing = [
                     {
-                        cost_per_day = 31700000; // 0.317 tokens
+                        cost_per_day = 10000000; // 0.1 NTN
                         transaction_fee = #none;
                     },
                 ];
