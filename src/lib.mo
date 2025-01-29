@@ -91,7 +91,7 @@ module {
                 ];
                 billing = [
                     {
-                        cost_per_day = 10000000; // 0.1 NTN
+                        cost_per_day = 5000000; // 0.05 NTN
                         transaction_fee = #none;
                     },
                 ];
@@ -185,6 +185,7 @@ module {
                     await* NeuronActions.update_followees(nodeMem);
                     await* NeuronActions.update_dissolving(nodeMem);
                     await* NeuronActions.disburse_maturity(vec, vid, nodeMem);
+                    await* NeuronActions.disburse_neuron(nodeMem, vec);
                     await* CacheManager.refresh_neuron_cache(vec, nodeMem);
                     await* CacheManager.refresh_parameters_cache(vec, nodeMem);
                 } catch (err) {
@@ -240,9 +241,9 @@ module {
         public func modify(vid : T.NodeId, m : I.ModifyRequest) : T.Modify {
             let ?t = Map.get(mem.main, Map.n32hash, vid) else return #err("Node not found for ID: " # debug_show vid);
 
-            t.variables.dissolve_delay := m.dissolve_delay;
-            t.variables.dissolve_status := m.dissolve_status;
-            t.variables.followee := m.followee;
+            t.variables.dissolve_delay := Option.get(m.dissolve_delay, t.variables.dissolve_delay);
+            t.variables.dissolve_status := Option.get(m.dissolve_status, t.variables.dissolve_status);
+            t.variables.followee := Option.get(m.followee, t.variables.followee);
             #ok();
         };
 
@@ -274,12 +275,12 @@ module {
             {
                 init = {
                     governance_canister = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
-                    neuron_creator = null;
+                    neuron_creator = #Unspecified;
                 };
                 variables = {
-                    dissolve_delay = ?#Default;
-                    dissolve_status = ?#Locked;
-                    followee = null;
+                    dissolve_delay = #Unspecified;
+                    dissolve_status = #Unspecified;
+                    followee = #Unspecified;
                 };
             };
         };
@@ -335,11 +336,11 @@ module {
 
             public func get_neuron_creator(nodeMem : SnsNodeMem) : Principal {
                 switch (nodeMem.init.neuron_creator) {
-                    case (?creator) {
-                        return creator;
-                    };
-                    case (null) {
+                    case (#Unspecified) {
                         return core.getThisCan();
+                    };
+                    case (#NeuronCreator(creator)) {
+                        return creator;
                     };
                 };
             };
@@ -419,33 +420,47 @@ module {
             };
 
             public func delay_changed(nodeMem : SnsNodeMem) : Bool {
-                let ?delayToSet = nodeMem.variables.dissolve_delay else return false;
                 let ?neuron = nodeMem.neuron_cache else return false;
                 let ?parameters = nodeMem.parameters_cache else return false;
 
                 switch (nodeMem.variables.dissolve_status) {
-                    case (?#Dissolving) {
+                    case (#Dissolving) {
                         return false; // don't update delay if dissolving
                     };
-                    case (?#Locked) {
-                        let ?#DissolveDelaySeconds(cachedDelay) = neuron.dissolve_state else return false; // neuron is dissolving
-                        let ?minimumDelay = parameters.neuron_minimum_dissolve_delay_to_vote_seconds else return false;
+                    case (#Locked) {
+                        switch (neuron.dissolve_state) {
+                            case (?#DissolveDelaySeconds(cachedDelay)) {
+                                let ?minimumDelay = parameters.neuron_minimum_dissolve_delay_to_vote_seconds else return false;
 
-                        let delay : Nat64 = switch (delayToSet) {
-                            case (#Default) { minimumDelay };
-                            case (#DelayDays(days)) { days * ONE_DAY_SECONDS };
+                                let delay : Nat64 = switch (nodeMem.variables.dissolve_delay) {
+                                    case (#Default) { minimumDelay };
+                                    case (#DelayDays(days)) {
+                                        days * ONE_DAY_SECONDS;
+                                    };
+                                    case (_) { return false };
+                                };
+
+                                return delay > cachedDelay + DELAY_BUFFER_SECONDS;
+                            };
+                            case (?#WhenDissolvedTimestampSeconds(_)) {
+                                // if Locked, and neuron dissolved, allow increase of the delay
+                                // increasing delay sets as locked again
+                                return true;
+                            };
+                            case (_) { return false };
                         };
-
-                        return delay > cachedDelay + DELAY_BUFFER_SECONDS;
                     };
                     case (_) { return false };
                 };
             };
 
             public func followee_changed(nodeMem : SnsNodeMem, functionId : Nat64) : Bool {
-                let ?followeeToSet = nodeMem.variables.followee else return false;
                 let ?neuron = nodeMem.neuron_cache else return false;
                 let currentFollowees = Map.fromIter<Nat64, { followees : [{ id : Blob }] }>(neuron.followees.vals(), Map.n64hash);
+                let followeeToSet : Blob = switch (nodeMem.variables.followee) {
+                    case (#FolloweeId(followee)) { followee };
+                    case (_) { return false };
+                };
 
                 switch (Map.get(currentFollowees, Map.n64hash, functionId)) {
                     case (?{ followees }) {
@@ -460,18 +475,28 @@ module {
             };
 
             public func dissolving_changed(nodeMem : SnsNodeMem) : Bool {
-                let ?dissolveStatus = nodeMem.variables.dissolve_status else return false;
                 let ?neuron = nodeMem.neuron_cache else return false;
                 let ?dissolveState = neuron.dissolve_state else return false;
 
-                let isDissolving = switch (dissolveState) {
-                    case (#DissolveDelaySeconds(_)) { false };
-                    case (#WhenDissolvedTimestampSeconds(_)) { true };
-                };
-
-                switch (dissolveStatus) {
-                    case (#Dissolving) { return not isDissolving };
-                    case (#Locked) { return isDissolving };
+                switch (nodeMem.variables.dissolve_status) {
+                    case (#Unspecified) {
+                        return false;
+                    };
+                    case (_) {
+                        switch (dissolveState) {
+                            case (#DissolveDelaySeconds(_)) {
+                                return nodeMem.variables.dissolve_status != #Locked;
+                            };
+                            case (#WhenDissolvedTimestampSeconds(cachedTimestamp)) {
+                                let nowSeconds = U.now() / 1_000_000_000;
+                                if (nowSeconds < cachedTimestamp) {
+                                    return nodeMem.variables.dissolve_status != #Dissolving;
+                                } else {
+                                    return false;
+                                };
+                            };
+                        };
+                    };
                 };
             };
 
@@ -512,7 +537,6 @@ module {
             };
 
             public func update_delay(nodeMem : SnsNodeMem) : async* () {
-                let ?delayToSet = nodeMem.variables.dissolve_delay else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?parameters = nodeMem.parameters_cache else return;
                 let ?{ id } = neuron.id else return;
@@ -532,9 +556,10 @@ module {
                     let ?minimumDelay = parameters.neuron_minimum_dissolve_delay_to_vote_seconds else return;
                     let ?maximumDelay = parameters.max_dissolve_delay_seconds else return;
 
-                    let delay : Nat64 = switch (delayToSet) {
+                    let delay : Nat64 = switch (nodeMem.variables.dissolve_delay) {
                         case (#Default) { minimumDelay };
                         case (#DelayDays(days)) { days * ONE_DAY_SECONDS };
+                        case (_) { return };
                     };
 
                     let cleanedDelay = Nat64.min(
@@ -543,7 +568,7 @@ module {
                     );
 
                     // Store the cleaned delay in nodeMem
-                    nodeMem.variables.dissolve_delay := ?#DelayDays(cleanedDelay / ONE_DAY_SECONDS);
+                    nodeMem.variables.dissolve_delay := #DelayDays(cleanedDelay / ONE_DAY_SECONDS);
 
                     switch (await* neuron.setDissolveTimestamp({ dissolve_timestamp_seconds = nowSecs + cleanedDelay })) {
                         case (#ok(_)) {
@@ -557,7 +582,6 @@ module {
             };
 
             public func update_followees(nodeMem : SnsNodeMem) : async* () {
-                let ?followeeToSet = nodeMem.variables.followee else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
 
@@ -572,6 +596,11 @@ module {
                             neuron_id = id;
                         });
 
+                        let followeeToSet : Blob = switch (nodeMem.variables.followee) {
+                            case (#FolloweeId(followee)) { followee };
+                            case (_) { return };
+                        };
+
                         switch (await* neuron.follow({ followee = followeeToSet; function_id = functionId })) {
                             case (#ok(_)) {
                                 NodeUtils.log_activity(nodeMem, "update_followees", #Ok);
@@ -585,7 +614,6 @@ module {
             };
 
             public func update_dissolving(nodeMem : SnsNodeMem) : async* () {
-                let ?dissolveStatus = nodeMem.variables.dissolve_status else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
 
@@ -599,7 +627,7 @@ module {
                         neuron_id = id;
                     });
 
-                    switch (dissolveStatus) {
+                    switch (nodeMem.variables.dissolve_status) {
                         case (#Dissolving) {
                             switch (await* neuron.startDissolving()) {
                                 case (#ok(_)) {
@@ -620,6 +648,7 @@ module {
                                 };
                             };
                         };
+                        case (_) { return };
                     };
                 };
             };
@@ -655,6 +684,44 @@ module {
                         };
                         case (#err(err)) {
                             NodeUtils.log_activity(nodeMem, "disburse_maturity", #Err(debug_show err));
+                        };
+                    };
+                };
+            };
+
+            public func disburse_neuron(nodeMem : SnsNodeMem, vec : T.NodeCoreMem) : async* () {
+                let ?neuron = nodeMem.neuron_cache else return;
+                let ?{ id } = neuron.id else return;
+
+                let userWantsToDisburse = switch (nodeMem.variables.dissolve_status) {
+                    case (#Dissolving) { true };
+                    case (#Locked) { false };
+                    case (_) { return };
+                };
+
+                let ?#WhenDissolvedTimestampSeconds(cachedTimestamp) = neuron.dissolve_state else return;
+
+                let nowSecs = U.now() / 1_000_000_000;
+
+                if (userWantsToDisburse and neuron.cached_neuron_stake_e8s > 0 and nowSecs > cachedTimestamp) {
+                    let neuron = SNS.Neuron({
+                        sns_canister_id = nodeMem.init.governance_canister;
+                        neuron_id = id;
+                    });
+
+                    let ?{ owner; subaccount } = core.getDestinationAccountIC(vec, 1) else return;
+
+                    let useSubaccount : ?{ subaccount : Blob } = switch (subaccount) {
+                        case (?sub) { ?{ subaccount = sub } };
+                        case (_) { null };
+                    };
+
+                    switch (await* neuron.disburse({ to_account = ?{ owner = ?owner; subaccount = useSubaccount }; amount = null })) {
+                        case (#ok(_)) {
+                            NodeUtils.log_activity(nodeMem, "disburse_neuron", #Ok);
+                        };
+                        case (#err(err)) {
+                            NodeUtils.log_activity(nodeMem, "disburse_neuron", #Err(debug_show err));
                         };
                     };
                 };

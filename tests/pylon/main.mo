@@ -35,7 +35,6 @@ actor class SNSTESTPYLON() = this {
     stable let mem_core_1 = Core.Mem.Core.V1.new();
 
     let sns_icrc_1 : Principal = Principal.fromText("75lp5-u7777-77776-qaaba-cai");
-    dvf.add_ledger<system>(sns_icrc_1, #icrc);
 
     let core = Core.Mod<system>({
         xmem = mem_core_1;
@@ -66,7 +65,7 @@ actor class SNSTESTPYLON() = this {
             TEMP_NODE_EXPIRATION_SEC = 3600;
             MAX_INSTRUCTIONS_PER_HEARTBEAT = 300_000_000;
             REQUEST_MAX_EXPIRE_SEC = 3600;
-            ALLOW_TEMP_NODE_CREATION = false;
+            ALLOW_TEMP_NODE_CREATION = true;
         } : Core.SETTINGS;
         dvf;
         chain;

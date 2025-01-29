@@ -6,12 +6,12 @@ module {
     public type CreateRequest = {
         init : {
             governance_canister : Principal;
-            neuron_creator : ?Principal;
+            neuron_creator : Ver1.SnsNeuronCreator;
         };
         variables : {
-            dissolve_delay : ?Ver1.SnsDissolveDelay;
-            dissolve_status : ?Ver1.SnsDissolveStatus;
-            followee : ?Ver1.SnsFollowee;
+            dissolve_delay : Ver1.SnsDissolveDelay;
+            dissolve_status : Ver1.SnsDissolveStatus;
+            followee : Ver1.SnsFollowee;
         };
     };
 
@@ -25,12 +25,12 @@ module {
         init : {
             neuron_nonce : Nat64;
             governance_canister : Principal;
-            neuron_creator : ?Principal;
+            neuron_creator : Ver1.SnsNeuronCreator;
         };
         variables : {
-            dissolve_delay : ?Ver1.SnsDissolveDelay;
-            dissolve_status : ?Ver1.SnsDissolveStatus;
-            followee : ?Ver1.SnsFollowee;
+            dissolve_delay : Ver1.SnsDissolveDelay;
+            dissolve_status : Ver1.SnsDissolveStatus;
+            followee : Ver1.SnsFollowee;
         };
         internals : {
             updating : Ver1.SnsNeuronUpdatingStatus;

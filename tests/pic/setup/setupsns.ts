@@ -7,6 +7,7 @@ import {
   idlFactory as snsGovIdlFactory,
 } from "./nns/snsgovernance";
 import { _SERVICE as SNSW, SnsInitPayload, SnsCanisterIds } from "./nns/snsw";
+import { _SERVICE as SNSTESTPYLON } from "./sns_test_pylon/declarations/sns_test_pylon.did.js";
 import { Actor, PocketIc } from "@hadronous/pic";
 
 export class SetupSns {
@@ -27,7 +28,8 @@ export class SetupSns {
   public static async create(
     pic: PocketIc,
     snswActor: Actor<SNSW>,
-    snsPayload: SnsInitPayload
+    snsPayload: SnsInitPayload,
+    snsTestPylon: Actor<SNSTESTPYLON>
   ): Promise<SetupSns> {
     // spawn an SNS
     let res = await snswActor.deploy_new_sns({
@@ -46,14 +48,22 @@ export class SetupSns {
       res.canisters[0].governance[0]
     );
 
+    // intialise SNS mode
+    govActor.setPrincipal(res.canisters[0].swap[0]);
+    await govActor.set_mode({ mode: 1 });
+
+    // add sns ledger to supported ledgers
+    await snsTestPylon.add_supported_ledger(res.canisters[0].ledger[0], {
+      icrc: null,
+    });
+
     return new SetupSns(icrcActor, govActor, res.canisters[0]);
   }
 
   public getSnsCanisters(): SnsCanisterIds {
-    for (const [key, value] of Object.entries(this.canisterIds)) {
-      console.log(`${key}: ${value}`);
-    }
-
+    // for (const [key, value] of Object.entries(this.canisterIds)) {
+    //   console.log(`${key}: ${value}`);
+    // }
     return this.canisterIds;
   }
 
