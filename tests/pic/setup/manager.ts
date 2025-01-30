@@ -126,7 +126,7 @@ export class Manager {
     // send me some tokens from this SNS to my account
     await this.sendIcrc({
       to: { owner: this.me.getPrincipal(), subaccount: [] },
-      amount: 500_0000_0000n,
+      amount: 5000_0000_0000n,
       icrcActor: sns.getIcrcLedger(),
       sender: sns.getSnsCanisters().governance[0],
     });
@@ -471,12 +471,19 @@ export class Manager {
     let author = Principal.fromText(
       "jv4ws-fbili-a35rv-xd7a5-xwvxw-trink-oluun-g7bcp-oq5f6-35cba-vqe"
     );
+    let platform = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
+
     // return other balances to check things out
-    let icrc = await icrcActor.icrc1_balance_of({
+    let authorBilling = await icrcActor.icrc1_balance_of({
       owner: author,
       subaccount: [],
     });
 
-    return { icrc_tokens: icrc };
+    let platformBilling = await icrcActor.icrc1_balance_of({
+      owner: platform,
+      subaccount: [],
+    });
+
+    return { author_billing: authorBilling, platform_billing: platformBilling };
   }
 }
