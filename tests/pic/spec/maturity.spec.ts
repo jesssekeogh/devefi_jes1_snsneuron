@@ -5,7 +5,7 @@ import { NodeShared } from "../setup/sns_test_pylon/declarations/sns_test_pylon.
 import { SnsNeuron } from "../setup/snsneuron.ts";
 import { exampleSnsInitPayload } from "../setup/snsvers/sns_ver1.ts";
 
-describe.skip("Maturity", () => {
+describe("Maturity", () => {
   let manager: Manager;
   let node: NodeShared;
   let sns: SetupSns;
@@ -28,7 +28,6 @@ describe.skip("Maturity", () => {
       neuron_params: {
         neuron_ledger_canister: sns.getSnsCanisters().ledger[0],
         neuron_governance_canister: sns.getSnsCanisters().governance[0],
-        neuron_creator: { Unspecified: null },
         dissolve_delay: { Default: null },
         followee: { FolloweeId: snsNeuron.getNeuron().id[0].id },
         dissolve_status: { Locked: null },

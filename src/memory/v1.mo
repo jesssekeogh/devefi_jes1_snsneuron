@@ -13,9 +13,7 @@ module {
 
     public type SnsNodeMem = {
         init : {
-            neuron_nonce : Nat64;
             governance_canister : Principal;
-            neuron_creator : SnsNeuronCreator;
         };
         variables : {
             var dissolve_delay : SnsDissolveDelay;
@@ -25,25 +23,20 @@ module {
         internals : {
             var updating : SnsNeuronUpdatingStatus;
             var refresh_idx : ?Nat64;
+            var neuron_claimed : Bool;
+            var neuron_state : ?Int32;
         };
         var neuron_cache : ?SnsNeuronCache;
         var parameters_cache : ?SnsParametersCache;
         var log : [SnsNeuronActivity];
     };
 
-    public type SnsNeuronCreator = {
-        #Unspecified;
-        #NeuronCreator : Principal;
-    };
-
     public type SnsDissolveDelay = {
-        #Unspecified;
         #Default;
         #DelayDays : Nat64;
     };
 
     public type SnsDissolveStatus = {
-        #Unspecified;
         #Dissolving;
         #Locked;
     };

@@ -11,7 +11,6 @@ import {
   SnsDissolveDelay,
   SnsDissolveStatus,
   SnsFollowee,
-  SnsNeuronCreator,
 } from "./sns_test_pylon/declarations/sns_test_pylon.did.js";
 import {
   _SERVICE as ICRCLEDGER,
@@ -38,7 +37,6 @@ import { SetupSns } from "./setupsns.ts";
 interface NeuronParams {
   neuron_ledger_canister: Principal;
   neuron_governance_canister: Principal;
-  neuron_creator: SnsNeuronCreator;
   dissolve_delay: SnsDissolveDelay;
   followee: SnsFollowee;
   dissolve_status: SnsDissolveStatus;
@@ -280,7 +278,6 @@ export class Manager {
     let creq: CreateRequest = {
       devefi_jes1_snsneuron: {
         init: {
-          neuron_creator: stakeParams.neuron_params.neuron_creator,
           governance_canister:
             stakeParams.neuron_params.neuron_governance_canister,
         },

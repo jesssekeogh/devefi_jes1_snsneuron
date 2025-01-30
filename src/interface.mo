@@ -6,7 +6,6 @@ module {
     public type CreateRequest = {
         init : {
             governance_canister : Principal;
-            neuron_creator : Ver1.SnsNeuronCreator;
         };
         variables : {
             dissolve_delay : Ver1.SnsDissolveDelay;
@@ -23,9 +22,7 @@ module {
 
     public type Shared = {
         init : {
-            neuron_nonce : Nat64;
             governance_canister : Principal;
-            neuron_creator : Ver1.SnsNeuronCreator;
         };
         variables : {
             dissolve_delay : Ver1.SnsDissolveDelay;
@@ -35,6 +32,8 @@ module {
         internals : {
             updating : Ver1.SnsNeuronUpdatingStatus;
             refresh_idx : ?Nat64;
+            neuron_claimed : Bool;
+            neuron_state : ?Int32;
         };
         neuron_cache : ?Ver1.SnsNeuronCache;
         parameters_cache : ?Ver1.SnsParametersCache;
