@@ -345,12 +345,22 @@ module {
                 };
             };
 
+            // check if the node needs a refresh and has permission to do so
             private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
                 return (
                     CacheManager.stake_increased(nodeMem) or
-                    CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) or
-                    CacheManager.dissolving_changed(nodeMem) or
-                    CacheManager.delay_changed(nodeMem)
+                    (
+                        CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) and
+                        NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.Vote)
+                    ) or
+                    (
+                        CacheManager.dissolving_changed(nodeMem) and
+                        NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.ConfigureDissolveState)
+                    ) or
+                    (
+                        CacheManager.delay_changed(nodeMem) and
+                        NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.ConfigureDissolveState)
+                    )
                 );
             };
 
@@ -588,7 +598,7 @@ module {
                 for (functionId in SNS_ACTIONS.vals()) {
                     if (CacheManager.followee_changed(nodeMem, functionId)) {
                         if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.Vote)) {
-                            return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.Vote));
+                            return NodeUtils.log_activity(nodeMem, "update_followees", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.Vote));
                         };
 
                         let neuron = SNS.Neuron({
@@ -619,7 +629,7 @@ module {
 
                 if (CacheManager.dissolving_changed(nodeMem)) {
                     if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.ConfigureDissolveState)) {
-                        return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.ConfigureDissolveState));
+                        return NodeUtils.log_activity(nodeMem, "update_dissolving", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.ConfigureDissolveState));
                     };
 
                     let neuron = SNS.Neuron({
@@ -661,7 +671,7 @@ module {
 
                 if (neuron.maturity_e8s_equivalent > Nat64.fromNat(tokenFee)) {
                     if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.DisburseMaturity)) {
-                        return NodeUtils.log_activity(nodeMem, "update_delay", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.DisburseMaturity));
+                        return NodeUtils.log_activity(nodeMem, "disburse_maturity", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.DisburseMaturity));
                     };
 
                     // send maturity to the maturity source
@@ -704,6 +714,10 @@ module {
                 let nowSecs = U.now() / 1_000_000_000;
 
                 if (userWantsToDisburse and neuron.cached_neuron_stake_e8s > 0 and nowSecs > cachedTimestamp) {
+                    if (not NodeUtils.node_authorized(nodeMem, SNS_PERMISSIONS.Disburse)) {
+                        return NodeUtils.log_activity(nodeMem, "disburse_neuron", #Err("Node does not have permission type: " # debug_show SNS_PERMISSIONS.Disburse));
+                    };
+
                     let neuron = SNS.Neuron({
                         sns_canister_id = nodeMem.init.governance_canister;
                         neuron_id = id;

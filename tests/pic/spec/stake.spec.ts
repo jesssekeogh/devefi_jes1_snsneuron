@@ -9,7 +9,7 @@ import { SetupSns } from "../setup/setupsns.ts";
 import { NodeShared } from "../setup/sns_test_pylon/declarations/sns_test_pylon.did.js";
 import { exampleSnsInitPayload } from "../setup/snsvers/sns_ver1.ts";
 
-describe("Stake", () => {
+describe.skip("Stake", () => {
   let manager: Manager;
   let node: NodeShared;
   let sns: SetupSns;

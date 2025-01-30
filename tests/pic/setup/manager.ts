@@ -56,16 +56,19 @@ export class Manager {
   private readonly pic: PocketIc;
   private readonly snsTestPylon: Actor<SNSTESTPYLON>;
   private readonly snswActor: Actor<SNSW>;
+  private readonly snsTestPylonCanisterId: Principal;
 
   constructor(
     pic: PocketIc,
     me: ReturnType<typeof createIdentity>,
     snsTestPylon: Actor<SNSTESTPYLON>,
+    snsTestPylonCanisterId: Principal,
     snswActor: Actor<SNSW>
   ) {
     this.pic = pic;
     this.me = me;
     this.snsTestPylon = snsTestPylon;
+    this.snsTestPylonCanisterId = snsTestPylonCanisterId;
     this.snswActor = snswActor;
   }
 
@@ -101,7 +104,13 @@ export class Manager {
       sns_subnet_ids_to_remove: [Principal.fromText(NNS_SUBNET_ID)],
     });
 
-    return new Manager(pic, identity, pylonFixture.actor, snswActor);
+    return new Manager(
+      pic,
+      identity,
+      pylonFixture.actor,
+      pylonFixture.canisterId,
+      snswActor
+    );
   }
 
   public async afterAll(): Promise<void> {
@@ -133,6 +142,10 @@ export class Manager {
 
   public getSnsTestPylon(): Actor<SNSTESTPYLON> {
     return this.snsTestPylon;
+  }
+
+  public getSnsTestPylonCanisterId(): Principal {
+    return this.snsTestPylonCanisterId;
   }
 
   public async getNow(): Promise<bigint> {
