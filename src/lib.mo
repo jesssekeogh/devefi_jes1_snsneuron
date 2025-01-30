@@ -132,8 +132,8 @@ module {
                 let requiredStake = if (Option.isSome(nodeMem.neuron_cache)) {
                     core.Source.fee(sourceStake);
                 } else {
-                    let ?neuron = nodeMem.parameters_cache else return; // if parameters not cached, return
-                    let ?minimumStake = neuron.neuron_minimum_stake_e8s else return;
+                    let ?parameters = nodeMem.parameters_cache else return; // if parameters not cached, return
+                    let ?minimumStake = parameters.neuron_minimum_stake_e8s else return;
 
                     Nat64.toNat(minimumStake) + tokenFee;
                 };
@@ -323,7 +323,7 @@ module {
                 };
             };
 
-            // check if the node needs a refresh and has permission to do so
+            // check if the node needs a refresh
             private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
                 return (
                     CacheManager.stake_increased(nodeMem) or
