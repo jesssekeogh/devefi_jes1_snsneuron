@@ -4,9 +4,6 @@ import Principal "mo:base/Principal";
 module {
 
     public type CreateRequest = {
-        init : {
-            governance_canister : Principal;
-        };
         variables : {
             dissolve_delay : Ver1.SnsDissolveDelay;
             dissolve_status : Ver1.SnsDissolveStatus;
@@ -21,9 +18,6 @@ module {
     };
 
     public type Shared = {
-        init : {
-            governance_canister : Principal;
-        };
         variables : {
             dissolve_delay : Ver1.SnsDissolveDelay;
             dissolve_status : Ver1.SnsDissolveStatus;
@@ -34,6 +28,7 @@ module {
             refresh_idx : ?Nat64;
             neuron_claimed : Bool;
             neuron_state : ?Int32;
+            governance_canister : ?Principal;
         };
         neuron_cache : ?Ver1.SnsNeuronCache;
         parameters_cache : ?Ver1.SnsParametersCache;

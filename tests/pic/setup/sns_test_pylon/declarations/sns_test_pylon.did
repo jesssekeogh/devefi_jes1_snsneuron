@@ -190,9 +190,9 @@ type SnsDissolveDelay =
  };
 type Shared__1 = 
  record {
-   init: record {governance_canister: principal;};
    internals:
     record {
+      governance_canister: opt principal;
       neuron_claimed: bool;
       neuron_state: opt int32;
       refresh_idx: opt nat64;
@@ -467,16 +467,13 @@ type DataCertificate =
    certificate: blob;
    hash_tree: blob;
  };
-type CreateRequest__1 = 
- record {
-   init: record {governance_canister: principal;};
-   variables:
-    record {
-      dissolve_delay: SnsDissolveDelay;
-      dissolve_status: SnsDissolveStatus;
-      followee: SnsFollowee;
-    };
- };
+type CreateRequest__1 = record {
+                          variables:
+                           record {
+                             dissolve_delay: SnsDissolveDelay;
+                             dissolve_status: SnsDissolveStatus;
+                             followee: SnsFollowee;
+                           };};
 type CreateRequest = variant {devefi_jes1_snsneuron: CreateRequest__1;};
 type CreateNodeResponse = 
  variant {

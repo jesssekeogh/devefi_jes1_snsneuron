@@ -11,7 +11,7 @@ import Nat32 "mo:base/Nat32";
 import Core "mo:devefi/core";
 import Ver1 "./memory/v1";
 import I "./interface";
-import { SNS } "mo:neuro";
+import { SNS; SNSW } "mo:neuro";
 import Tools "mo:neuro/tools";
 
 module {
@@ -37,6 +37,8 @@ module {
         let mem = MU.access(xmem);
 
         public type SnsNodeMem = Ver1.SnsNodeMem;
+
+        let SNSW_CANISTER_ID = Principal.fromText("qaa6y-5yaaa-aaaaa-aaafa-cai");
 
         // Interval for cache check when no neuron refresh is pending.
         let TIMEOUT_NANOS_NO_REFRESH_PENDING : Nat64 = (12 * 60 * 60 * 1_000_000_000); // every 12 hours
@@ -76,7 +78,7 @@ module {
                 author = "jes1";
                 description = "Stake SNS neurons and receive maturity directly to your destination";
                 supported_ledgers = []; // all pylon ledgers
-                version = #beta([0, 1, 1]);
+                version = #beta([0, 1, 2]);
                 create_allowed = true;
                 ledger_slots = [
                     "Neuron"
@@ -140,11 +142,13 @@ module {
                 };
 
                 if (stakeBal > requiredStake) {
+                    let ?governanceCanister = nodeMem.internals.governance_canister else return;
+
                     // Proceed to send ICP to the neuron's subaccount
                     let #ok(intent) = core.Source.Send.intent(
                         sourceStake,
                         #external_account({
-                            owner = nodeMem.init.governance_canister;
+                            owner = governanceCanister;
                             subaccount = ?neuronSubaccount;
                         }),
                         stakeBal,
@@ -177,6 +181,7 @@ module {
                     await* NeuronActions.update_dissolving(nodeMem);
                     await* NeuronActions.disburse_maturity(vec, vid, nodeMem);
                     await* NeuronActions.disburse_neuron(nodeMem, vec);
+                    await* CacheManager.find_governance_canister(vec, nodeMem);
                     await* CacheManager.refresh_neuron_cache(vec, vid, nodeMem);
                     await* CacheManager.refresh_parameters_cache(vec, nodeMem);
                 } catch (err) {
@@ -189,9 +194,6 @@ module {
 
         public func create(vid : T.NodeId, _req : T.CommonCreateRequest, t : I.CreateRequest) : T.Create {
             let nodeMem : SnsNodeMem = {
-                init = {
-                    governance_canister = t.init.governance_canister;
-                };
                 variables = {
                     var dissolve_delay = t.variables.dissolve_delay;
                     var dissolve_status = t.variables.dissolve_status;
@@ -202,6 +204,7 @@ module {
                     var refresh_idx = null;
                     var neuron_claimed = false;
                     var neuron_state = null;
+                    var governance_canister = null;
                 };
                 var neuron_cache = null;
                 var parameters_cache = null;
@@ -242,9 +245,6 @@ module {
             let ?t = Map.get(mem.main, Map.n32hash, vid) else return #err("Node not found for ID: " # debug_show vid);
 
             #ok {
-                init = {
-                    governance_canister = t.init.governance_canister;
-                };
                 variables = {
                     dissolve_delay = t.variables.dissolve_delay;
                     dissolve_status = t.variables.dissolve_status;
@@ -255,6 +255,7 @@ module {
                     refresh_idx = t.internals.refresh_idx;
                     neuron_claimed = t.internals.neuron_claimed;
                     neuron_state = t.internals.neuron_state;
+                    governance_canister = t.internals.governance_canister;
                 };
                 neuron_cache = t.neuron_cache;
                 parameters_cache = t.parameters_cache;
@@ -264,9 +265,6 @@ module {
 
         public func defaults() : I.CreateRequest {
             {
-                init = {
-                    governance_canister = Principal.fromText("eqsml-lyaaa-aaaaq-aacdq-cai");
-                };
                 variables = {
                     dissolve_delay = #Default;
                     dissolve_status = #Locked;
@@ -311,7 +309,9 @@ module {
             // check if the node needs a refresh
             private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
                 return (
-                    CacheManager.stake_increased(nodeMem) or
+                    Option.isNull(nodeMem.internals.governance_canister) or
+                    Option.isNull(nodeMem.parameters_cache) or
+                    Option.isSome(nodeMem.internals.refresh_idx) or
                     CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) or
                     CacheManager.dissolving_changed(nodeMem) or
                     CacheManager.delay_changed(nodeMem)
@@ -382,13 +382,14 @@ module {
         module CacheManager {
             public func refresh_neuron_cache(vec : T.NodeCoreMem, vid : T.NodeId, nodeMem : SnsNodeMem) : async* () {
                 if (not nodeMem.internals.neuron_claimed) return;
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
 
                 let neuronSubaccount = NodeUtils.computeNeuronSubaccount(vid);
                 let neuronLedger = U.onlyICLedger(vec.ledgers[0]);
 
                 let sns = SNS.Governance({
                     canister_id = core.getThisCan();
-                    sns_canister_id = nodeMem.init.governance_canister;
+                    sns_canister_id = governanceCanister;
                     sns_ledger_canister_id = neuronLedger;
                 });
 
@@ -399,18 +400,38 @@ module {
 
             public func refresh_parameters_cache(vec : T.NodeCoreMem, nodeMem : SnsNodeMem) : async* () {
                 if (Option.isSome(nodeMem.parameters_cache)) return;
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
 
                 let neuronLedger = U.onlyICLedger(vec.ledgers[0]);
 
                 let sns = SNS.Governance({
                     canister_id = core.getThisCan();
-                    sns_canister_id = nodeMem.init.governance_canister;
+                    sns_canister_id = governanceCanister;
                     sns_ledger_canister_id = neuronLedger;
                 });
 
                 let parameters = await* sns.getParameters();
 
                 nodeMem.parameters_cache := ?parameters;
+            };
+
+            public func find_governance_canister(vec : T.NodeCoreMem, nodeMem : SnsNodeMem) : async* () {
+                if (Option.isSome(nodeMem.internals.governance_canister)) return;
+
+                let neuronLedger = U.onlyICLedger(vec.ledgers[0]);
+
+                let snsw = SNSW.Canister({ snsw_canister_id = SNSW_CANISTER_ID });
+
+                let { instances } = await* snsw.listDeployedSnses();
+
+                label snsLoop for ({ governance_canister_id; ledger_canister_id } in instances.vals()) {
+                    let ?deployedLedger = ledger_canister_id else continue snsLoop;
+
+                    if (neuronLedger == deployedLedger) {
+                        nodeMem.internals.governance_canister := governance_canister_id;
+                        return;
+                    };
+                };
             };
 
             public func delay_changed(nodeMem : SnsNodeMem) : Bool {
@@ -484,14 +505,11 @@ module {
                     };
                 };
             };
-
-            public func stake_increased(nodeMem : SnsNodeMem) : Bool {
-                return Option.isSome(nodeMem.internals.refresh_idx);
-            };
         };
 
         module NeuronActions {
             public func refresh_neuron(vec : T.NodeCoreMem, vid : T.NodeId, nodeMem : SnsNodeMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let neuronLedger = U.onlyICLedger(vec.ledgers[0]);
                 let ?{ cls = #icrc(ledger) } = core.get_ledger_cls(neuronLedger) else return;
                 let ?refreshIdx = nodeMem.internals.refresh_idx else return;
@@ -499,7 +517,7 @@ module {
                 if (ledger.isSent(refreshIdx)) {
                     let sns = SNS.Governance({
                         canister_id = core.getThisCan();
-                        sns_canister_id = nodeMem.init.governance_canister;
+                        sns_canister_id = governanceCanister;
                         sns_ledger_canister_id = neuronLedger;
                     });
 
@@ -524,13 +542,14 @@ module {
             };
 
             public func update_delay(nodeMem : SnsNodeMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?parameters = nodeMem.parameters_cache else return;
                 let ?{ id } = neuron.id else return;
 
                 if (CacheManager.delay_changed(nodeMem)) {
                     let neuron = SNS.Neuron({
-                        sns_canister_id = nodeMem.init.governance_canister;
+                        sns_canister_id = governanceCanister;
                         neuron_id = id;
                     });
 
@@ -564,13 +583,14 @@ module {
             };
 
             public func update_followees(nodeMem : SnsNodeMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
 
                 for (functionId in SNS_ACTIONS.vals()) {
                     if (CacheManager.followee_changed(nodeMem, functionId)) {
                         let neuron = SNS.Neuron({
-                            sns_canister_id = nodeMem.init.governance_canister;
+                            sns_canister_id = governanceCanister;
                             neuron_id = id;
                         });
 
@@ -592,12 +612,13 @@ module {
             };
 
             public func update_dissolving(nodeMem : SnsNodeMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
 
                 if (CacheManager.dissolving_changed(nodeMem)) {
                     let neuron = SNS.Neuron({
-                        sns_canister_id = nodeMem.init.governance_canister;
+                        sns_canister_id = governanceCanister;
                         neuron_id = id;
                     });
 
@@ -627,6 +648,7 @@ module {
             };
 
             public func disburse_maturity(vec : T.NodeCoreMem, vid : T.NodeId, nodeMem : SnsNodeMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
                 let ?sourceMaturity = core.getSource(vid, vec, 1) else return;
@@ -643,7 +665,7 @@ module {
                     };
 
                     let neuron = SNS.Neuron({
-                        sns_canister_id = nodeMem.init.governance_canister;
+                        sns_canister_id = governanceCanister;
                         neuron_id = id;
                     });
 
@@ -659,6 +681,7 @@ module {
             };
 
             public func disburse_neuron(nodeMem : SnsNodeMem, vec : T.NodeCoreMem) : async* () {
+                let ?governanceCanister = nodeMem.internals.governance_canister else return;
                 let ?neuron = nodeMem.neuron_cache else return;
                 let ?{ id } = neuron.id else return;
 
@@ -671,7 +694,7 @@ module {
 
                 if (userWantsToDisburse and neuron.cached_neuron_stake_e8s > 0 and NodeUtils.getNeuronState(neuronState) == NEURON_STATES.unlocked) {
                     let neuron = SNS.Neuron({
-                        sns_canister_id = nodeMem.init.governance_canister;
+                        sns_canister_id = governanceCanister;
                         neuron_id = id;
                     });
 

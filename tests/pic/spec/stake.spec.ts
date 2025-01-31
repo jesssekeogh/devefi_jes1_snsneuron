@@ -23,7 +23,6 @@ describe("Stake", () => {
       ledger_actor: sns.getIcrcLedger(),
       neuron_params: {
         neuron_ledger_canister: sns.getSnsCanisters().ledger[0],
-        neuron_governance_canister: sns.getSnsCanisters().governance[0],
         dissolve_delay: { Default: null },
         followee: { FolloweeId: MOCK_FOLLOWEE_TO_SET },
         dissolve_status: { Locked: null },

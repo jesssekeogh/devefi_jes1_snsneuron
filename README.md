@@ -9,7 +9,7 @@ This module is an SNS neuron version of the [ICP Neuron Vector](https://github.c
 
 This module integrates with pylons—canisters running the DeVeFi framework and governed by SNS DAOs on the ICP network—enabling users to create instances of SNS neuron vectors. To create the vector, a minimum creation fee is required, charged by the pylon. For example, the Neutrinite DAO pylons may charge a creation fee of 0.5 NTN, which is stored in the vector's billing account. By default, each vector includes configurable options such as destinations, sources, billing, and refund settings, among other features. 
 
-Alongside these standard vector configurations, **the SNS neuron vector enables the pylon to stake neurons on behalf of vector owners while granting them control over the neuron.** The pylon achieves this by making calls to the user inputted SNS governance canister. To stake an SNS neuron the pylon must be tracking that SNS's ledger, use the `icrc55_get_pylon_meta` endpoint to see which ledgers are supported.
+Alongside these standard vector configurations, **the SNS neuron vector enables the pylon to stake neurons on behalf of vector owners while granting them control over the neuron.** The pylon achieves this by making calls to an SNS governance canister. To stake an SNS neuron the pylon must be tracking that SNS's ledger, use the `icrc55_get_pylon_meta` endpoint to see which ledgers are supported. The pylon will automatically find the corresponding governance canister.
 
 ## Vector Source Accounts
 
@@ -40,9 +40,6 @@ The ICRC-1 account that will receive the SNS tokens staked in your main neuron w
 The neuron can be configured by the vector controller, allowing you to maintain voting power and earn rewards. The available configurations are:
 
 ```javascript
-`init`: {
-    'governance_canister': Principal,
-},
 'variables': {
     'dissolve_delay': { 'Default': null } | { 'DelayDays': bigint },
     'dissolve_status': { 'Locked': null } | { 'Dissolving': null },

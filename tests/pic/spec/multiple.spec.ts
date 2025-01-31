@@ -66,8 +66,6 @@ describe("Multiple", () => {
           neuron_params: {
             neuron_ledger_canister:
               snsData.stakeSns.getSnsCanisters().ledger[0],
-            neuron_governance_canister:
-              snsData.stakeSns.getSnsCanisters().governance[0],
             dissolve_delay: { Default: null },
             followee: {
               FolloweeId: MOCK_FOLLOWEE_TO_SET,

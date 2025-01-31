@@ -12,9 +12,6 @@ module {
     });
 
     public type SnsNodeMem = {
-        init : {
-            governance_canister : Principal;
-        };
         variables : {
             var dissolve_delay : SnsDissolveDelay;
             var dissolve_status : SnsDissolveStatus;
@@ -25,6 +22,7 @@ module {
             var refresh_idx : ?Nat64;
             var neuron_claimed : Bool;
             var neuron_state : ?Int32;
+            var governance_canister : ?Principal;
         };
         var neuron_cache : ?SnsNeuronCache;
         var parameters_cache : ?SnsParametersCache;

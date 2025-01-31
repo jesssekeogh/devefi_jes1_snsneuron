@@ -94,7 +94,6 @@ export type CreateNodeResponse = { 'ok' : GetNodeResponse } |
   { 'err' : string };
 export type CreateRequest = { 'devefi_jes1_snsneuron' : CreateRequest__1 };
 export interface CreateRequest__1 {
-  'init' : { 'governance_canister' : Principal },
   'variables' : {
     'dissolve_delay' : SnsDissolveDelay,
     'dissolve_status' : SnsDissolveStatus,
@@ -309,11 +308,11 @@ export interface Shared__1 {
   'log' : Array<SnsNeuronActivity>,
   'internals' : {
     'neuron_state' : [] | [number],
+    'governance_canister' : [] | [Principal],
     'neuron_claimed' : boolean,
     'refresh_idx' : [] | [bigint],
     'updating' : SnsNeuronUpdatingStatus,
   },
-  'init' : { 'governance_canister' : Principal },
   'parameters_cache' : [] | [SnsParametersCache],
   'variables' : {
     'dissolve_delay' : SnsDissolveDelay,

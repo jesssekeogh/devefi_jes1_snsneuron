@@ -166,7 +166,6 @@ export const idlFactory = ({ IDL }) => {
     'refund' : Account,
   });
   const CreateRequest__1 = IDL.Record({
-    'init' : IDL.Record({ 'governance_canister' : IDL.Principal }),
     'variables' : IDL.Record({
       'dissolve_delay' : SnsDissolveDelay,
       'dissolve_status' : SnsDissolveStatus,
@@ -322,11 +321,11 @@ export const idlFactory = ({ IDL }) => {
     'log' : IDL.Vec(SnsNeuronActivity),
     'internals' : IDL.Record({
       'neuron_state' : IDL.Opt(IDL.Int32),
+      'governance_canister' : IDL.Opt(IDL.Principal),
       'neuron_claimed' : IDL.Bool,
       'refresh_idx' : IDL.Opt(IDL.Nat64),
       'updating' : SnsNeuronUpdatingStatus,
     }),
-    'init' : IDL.Record({ 'governance_canister' : IDL.Principal }),
     'parameters_cache' : IDL.Opt(SnsParametersCache),
     'variables' : IDL.Record({
       'dissolve_delay' : SnsDissolveDelay,

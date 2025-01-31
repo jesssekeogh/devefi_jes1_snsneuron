@@ -27,7 +27,6 @@ describe("Maturity", () => {
       ledger_actor: sns.getIcrcLedger(),
       neuron_params: {
         neuron_ledger_canister: sns.getSnsCanisters().ledger[0],
-        neuron_governance_canister: sns.getSnsCanisters().governance[0],
         dissolve_delay: { Default: null },
         followee: { FolloweeId: snsNeuron.getNeuron().id[0].id },
         dissolve_status: { Locked: null },

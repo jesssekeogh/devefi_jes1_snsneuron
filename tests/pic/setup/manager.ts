@@ -36,7 +36,6 @@ import { SetupSns } from "./setupsns.ts";
 
 interface NeuronParams {
   neuron_ledger_canister: Principal;
-  neuron_governance_canister: Principal;
   dissolve_delay: SnsDissolveDelay;
   followee: SnsFollowee;
   dissolve_status: SnsDissolveStatus;
@@ -277,10 +276,6 @@ export class Manager {
 
     let creq: CreateRequest = {
       devefi_jes1_snsneuron: {
-        init: {
-          governance_canister:
-            stakeParams.neuron_params.neuron_governance_canister,
-        },
         variables: {
           dissolve_delay: stakeParams.neuron_params.dissolve_delay,
           dissolve_status: stakeParams.neuron_params.dissolve_status,
