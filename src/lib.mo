@@ -309,9 +309,7 @@ module {
             // check if the node needs a refresh
             private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
                 return (
-                    Option.isNull(nodeMem.internals.governance_canister) or
-                    Option.isNull(nodeMem.parameters_cache) or
-                    Option.isSome(nodeMem.internals.refresh_idx) or
+                    CacheManager.stake_increased(nodeMem) or
                     CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) or
                     CacheManager.dissolving_changed(nodeMem) or
                     CacheManager.delay_changed(nodeMem)
@@ -504,6 +502,10 @@ module {
                         return neuronState == NEURON_STATES.dissolving;
                     };
                 };
+            };
+
+            public func stake_increased(nodeMem : SnsNodeMem) : Bool {
+                return Option.isSome(nodeMem.internals.refresh_idx);
             };
         };
 
