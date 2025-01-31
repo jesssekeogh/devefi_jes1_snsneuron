@@ -62,6 +62,7 @@ module {
             12, // MINT_SNS_TOKENS critical proposal
         ];
 
+        // From here: https://github.com/dfinity/ic/blob/master/rs/nns/governance/proto/ic_nns_governance/pb/v1/governance.proto#L149
         let NEURON_STATES = {
             locked : Int32 = 1;
             dissolving : Int32 = 2;
@@ -75,7 +76,7 @@ module {
                 author = "jes1";
                 description = "Stake SNS neurons and receive maturity directly to your destination";
                 supported_ledgers = []; // all pylon ledgers
-                version = #beta([0, 1, 0]);
+                version = #beta([0, 1, 1]);
                 create_allowed = true;
                 ledger_slots = [
                     "Neuron"
@@ -151,7 +152,7 @@ module {
 
                     let txId = core.Source.Send.commit(intent);
 
-                    // Set refresh_idx to refresh or refresh the neuron in the next round
+                    // Set refresh_idx to refresh the neuron in the next round
                     NodeUtils.tx_sent(nodeMem, txId);
                 };
 
@@ -283,22 +284,6 @@ module {
         };
 
         module NodeUtils {
-            public func node_authorized(nodeMem : SnsNodeMem, requestedPermission : Int32) : Bool {
-                let ?neuron = nodeMem.neuron_cache else return false;
-
-                label permissionLoop for (permissions in neuron.permissions.vals()) {
-                    let ?principal = permissions.principal else continue permissionLoop;
-
-                    if (principal == core.getThisCan()) {
-                        for (permission in permissions.permission_type.vals()) {
-                            if (permission == requestedPermission) return true;
-                        };
-                    };
-                };
-
-                return false;
-            };
-
             public func node_ready(nodeMem : SnsNodeMem) : Bool {
                 // Determine the appropriate timeout based on whether the neuron should be refreshed
                 let timeout = if (node_needs_refresh(nodeMem)) {
@@ -371,6 +356,7 @@ module {
                 );
             };
 
+            // Determine the int32 state of the neuron based on the dissolve state, mocks how NNS neurons are handled
             public func getNeuronState(
                 neuronState : {
                     #DissolveDelaySeconds : Nat64;

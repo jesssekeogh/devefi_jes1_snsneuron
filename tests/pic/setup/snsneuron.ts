@@ -8,7 +8,7 @@ import { Principal } from "@dfinity/principal";
 import { Actor } from "@hadronous/pic";
 import { createHash, randomBytes } from "node:crypto";
 
-// needed for making proposals to get maturity and splitting to test transferring to a vector
+// needed for making proposals to get maturity
 
 export class SnsNeuron {
   private readonly snsGovActor: Actor<SNSGOVERNANCE>;
