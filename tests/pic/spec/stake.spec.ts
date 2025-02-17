@@ -54,7 +54,7 @@ describe("Stake", () => {
           .DissolveDelaySeconds
       ).toBe(
         node.custom[0].devefi_jes1_snsneuron.parameters_cache[0]
-          .neuron_minimum_dissolve_delay_to_vote_seconds[0]
+          .neuron_minimum_dissolve_delay_to_vote_seconds[0] + 60n // buffer
       );
     } else {
       fail("Expected 'DissolveDelaySeconds' in dissolve_state.");

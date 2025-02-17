@@ -44,7 +44,7 @@ module {
         let TIMEOUT_NANOS_NO_REFRESH_PENDING : Nat64 = (12 * 60 * 60 * 1_000_000_000); // every 12 hours
 
         // Timeout interval for when a neuron refresh is pending.
-        let TIMEOUT_NANOS_REFRESH_PENDING : Nat64 = (5 * 60 * 1_000_000_000); // every 5 minutes
+        let TIMEOUT_NANOS_REFRESH_PENDING : Nat64 = (3 * 60 * 1_000_000_000); // every 3 minutes
 
         // Maximum number of activities to keep in the main neuron's activity log
         let ACTIVITY_LOG_LIMIT : Nat = 10;
@@ -78,7 +78,7 @@ module {
                 author = "jes1";
                 description = "Stake SNS neurons and receive maturity directly to your destination";
                 supported_ledgers = []; // all pylon ledgers
-                version = #beta([0, 1, 2]);
+                version = #beta([0, 1, 3]);
                 create_allowed = true;
                 ledger_slots = [
                     "Neuron"
@@ -556,6 +556,7 @@ module {
                     });
 
                     let nowSecs = U.now() / 1_000_000_000;
+                    let extraBuffer : Nat64 = 60; // add 60 seconds as a buffer
 
                     let ?minimumDelay = parameters.neuron_minimum_dissolve_delay_to_vote_seconds else return;
                     let ?maximumDelay = parameters.max_dissolve_delay_seconds else return;
@@ -573,7 +574,7 @@ module {
                     // Store the cleaned delay in nodeMem
                     nodeMem.variables.dissolve_delay := #DelayDays(cleanedDelay / ONE_DAY_SECONDS);
 
-                    switch (await* neuron.setDissolveTimestamp({ dissolve_timestamp_seconds = nowSecs + cleanedDelay })) {
+                    switch (await* neuron.setDissolveTimestamp({ dissolve_timestamp_seconds = nowSecs + extraBuffer + cleanedDelay })) {
                         case (#ok(_)) {
                             NodeUtils.log_activity(nodeMem, "update_delay", #Ok);
                         };
