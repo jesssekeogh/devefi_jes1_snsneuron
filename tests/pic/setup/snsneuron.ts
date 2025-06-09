@@ -5,7 +5,7 @@ import {
   ManageNeuronResponse,
 } from "./nns/snsgovernance.js";
 import { Principal } from "@dfinity/principal";
-import { Actor } from "@hadronous/pic";
+import { Actor } from "@dfinity/pic";
 import { createHash, randomBytes } from "node:crypto";
 
 // needed for making proposals to get maturity

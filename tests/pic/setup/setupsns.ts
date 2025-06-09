@@ -8,7 +8,7 @@ import {
 } from "./nns/snsgovernance";
 import { _SERVICE as SNSW, SnsInitPayload, SnsCanisterIds } from "./nns/snsw";
 import { _SERVICE as SNSTESTPYLON } from "./sns_test_pylon/declarations/sns_test_pylon.did.js";
-import { Actor, PocketIc } from "@hadronous/pic";
+import { Actor, PocketIc } from "@dfinity/pic";
 
 export class SetupSns {
   private readonly icrcActor: Actor<ICRCLEDGER>;

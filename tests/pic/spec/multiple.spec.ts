@@ -98,12 +98,15 @@ describe("Multiple", () => {
           .cached_neuron_stake_e8s
       ).toBe(AMOUNT_TO_STAKE - EXPECTED_TRANSACTION_FEES);
       expect(
-        node.custom[0].devefi_jes1_snsneuron.neuron_cache[0].followees
-      ).toHaveLength(4);
+        node.custom[0].devefi_jes1_snsneuron.neuron_cache[0].topic_followees[0]
+          .topic_id_to_followees
+      ).toHaveLength(7);
 
       for (let followee of node.custom[0].devefi_jes1_snsneuron.neuron_cache[0]
-        .followees) {
-        expect(followee[1].followees[0].id).toStrictEqual(MOCK_FOLLOWEE_TO_SET);
+        .topic_followees[0].topic_id_to_followees) {
+        expect(followee[1].followees[0].neuron_id[0].id).toStrictEqual(
+          MOCK_FOLLOWEE_TO_SET
+        );
       }
     }
   });
@@ -131,12 +134,13 @@ describe("Multiple", () => {
     for (let { version, stakeSns, node } of allNodes) {
       node = await manager.getNode(node.id);
       expect(
-        node.custom[0].devefi_jes1_snsneuron.neuron_cache[0].followees
-      ).toHaveLength(4);
+        node.custom[0].devefi_jes1_snsneuron.neuron_cache[0].topic_followees[0]
+          .topic_id_to_followees
+      ).toHaveLength(7);
 
       for (let followee of node.custom[0].devefi_jes1_snsneuron.neuron_cache[0]
-        .followees) {
-        expect(followee[1].followees[0].id).toStrictEqual(
+        .topic_followees[0].topic_id_to_followees) {
+        expect(followee[1].followees[0].neuron_id[0].id).toStrictEqual(
           version === "v1"
             ? snsNeuron1.getNeuron().id[0].id
             : snsNeuron2.getNeuron().id[0].id

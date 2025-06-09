@@ -10,6 +10,7 @@ import Buffer "mo:base/Buffer";
 import Nat32 "mo:base/Nat32";
 import Core "mo:devefi/core";
 import Ver1 "./memory/v1";
+import Ver2 "./memory/v2";
 import I "./interface";
 import { SNS; SNSW } "mo:neuro";
 import Tools "mo:neuro/tools";
@@ -22,10 +23,11 @@ module {
     public module Mem {
         public module Vector {
             public let V1 = Ver1;
+            public let V2 = Ver2;
         };
     };
 
-    let M = Mem.Vector.V1;
+    let M = Mem.Vector.V2;
 
     public let ID = "devefi_jes1_snsneuron";
 
@@ -36,7 +38,7 @@ module {
 
         let mem = MU.access(xmem);
 
-        public type SnsNodeMem = Ver1.SnsNodeMem;
+        public type SnsNodeMem = Ver2.SnsNodeMem;
 
         let SNSW_CANISTER_ID = Principal.fromText("qaa6y-5yaaa-aaaaa-aaafa-cai");
 
@@ -55,15 +57,6 @@ module {
         // Minimum allowable delay increase, defined as a buffer one week (in seconds)
         let DELAY_BUFFER_SECONDS : Nat64 = (7 * ONE_DAY_SECONDS);
 
-        // From here: https://github.com/dfinity/ic/blob/master/rs/sns/governance/src/types.rs#L85
-        // Critical proposals found here: https://github.com/dfinity/ic/blob/master/rs/sns/governance/src/types.rs#L1685
-        let SNS_ACTIONS : [Nat64] = [
-            0, // Catch all for non-critical proposals
-            9, // TRANSFER_SNS_TREASURY_FUNDS critical proposal
-            11, // DEREGISTER_DAPP_CANISTERS critical proposal
-            12, // MINT_SNS_TOKENS critical proposal
-        ];
-
         // From here: https://github.com/dfinity/ic/blob/master/rs/nns/governance/proto/ic_nns_governance/pb/v1/governance.proto#L149
         let NEURON_STATES = {
             locked : Int32 = 1;
@@ -78,7 +71,7 @@ module {
                 author = "jes1";
                 description = "Stake SNS neurons and receive maturity directly to your destination";
                 supported_ledgers = []; // all pylon ledgers
-                version = #beta([0, 1, 3]);
+                version = #beta([0, 2, 0]);
                 create_allowed = true;
                 ledger_slots = [
                     "Neuron"
@@ -177,7 +170,7 @@ module {
                 try {
                     await* NeuronActions.refresh_neuron(vec, vid, nodeMem);
                     await* NeuronActions.update_delay(nodeMem);
-                    await* NeuronActions.update_followees(nodeMem);
+                    await* NeuronActions.update_following(nodeMem);
                     await* NeuronActions.update_dissolving(nodeMem);
                     await* NeuronActions.disburse_maturity(vec, vid, nodeMem);
                     await* NeuronActions.disburse_neuron(nodeMem, vec);
@@ -310,7 +303,7 @@ module {
             private func node_needs_refresh(nodeMem : SnsNodeMem) : Bool {
                 return (
                     CacheManager.stake_increased(nodeMem) or
-                    CacheManager.followee_changed(nodeMem, SNS_ACTIONS[0]) or
+                    CacheManager.following_changed(nodeMem) or
                     CacheManager.dissolving_changed(nodeMem) or
                     CacheManager.delay_changed(nodeMem)
                 );
@@ -325,7 +318,7 @@ module {
             };
 
             public func log_activity(nodeMem : SnsNodeMem, operation : Text, result : { #Ok; #Err : Text }) : () {
-                let log = Buffer.fromArray<Ver1.SnsNeuronActivity>(nodeMem.log);
+                let log = Buffer.fromArray<Ver2.SnsNeuronActivity>(nodeMem.log);
 
                 switch (result) {
                     case (#Ok(())) {
@@ -461,31 +454,34 @@ module {
                                     return true; // if unlocked and user changed to Locked, update delay
                                 } else {
                                     return false;
-                                };
+                                }; 
                             };
                         };
                     };
                 };
             };
 
-            public func followee_changed(nodeMem : SnsNodeMem, functionId : Nat64) : Bool {
+            public func following_changed(nodeMem : SnsNodeMem) : Bool {
                 let ?neuron = nodeMem.neuron_cache else return false;
-                let currentFollowees = Map.fromIter<Nat64, { followees : [{ id : Blob }] }>(neuron.followees.vals(), Map.n64hash);
-                let followeeToSet : Blob = switch (nodeMem.variables.followee) {
+
+                let followeeToSet = switch (nodeMem.variables.followee) {
                     case (#FolloweeId(followee)) { followee };
                     case (_) { return false };
                 };
 
-                switch (Map.get(currentFollowees, Map.n64hash, functionId)) {
-                    case (?{ followees }) {
-                        for (followee in followees.vals()) {
-                            if (followee.id == followeeToSet) return false;
-                        };
+                let ?{ topic_id_to_followees } = neuron.topic_followees else return true;
 
-                        return true // couldn't find the followee in there
+                for ((_, { followees }) in topic_id_to_followees.vals()) {
+                    label followeeLoop for (followee in followees.vals()) {
+                        let ?{ id } = followee.neuron_id else continue followeeLoop;
+
+                        // following assumed set across all topics
+                        if (Blob.equal(id, followeeToSet)) return false;
                     };
-                    case _ { return true };
                 };
+
+                // no following found, so it's not there or has changed
+                return true;
             };
 
             public func dissolving_changed(nodeMem : SnsNodeMem) : Bool {
@@ -585,30 +581,80 @@ module {
                 };
             };
 
-            public func update_followees(nodeMem : SnsNodeMem) : async* () {
+            public func update_following(nodeMem : SnsNodeMem) : async* () {
                 let ?governanceCanister = nodeMem.internals.governance_canister else return;
-                let ?neuron = nodeMem.neuron_cache else return;
-                let ?{ id } = neuron.id else return;
+                let ?{ id = ?{ id } } = nodeMem.neuron_cache else return;
 
-                for (functionId in SNS_ACTIONS.vals()) {
-                    if (CacheManager.followee_changed(nodeMem, functionId)) {
-                        let neuron = SNS.Neuron({
-                            sns_canister_id = governanceCanister;
-                            neuron_id = id;
-                        });
+                if (CacheManager.following_changed(nodeMem)) {
+                    let followeeToSet : Blob = switch (nodeMem.variables.followee) {
+                        case (#FolloweeId(followee)) { followee };
+                        case (_) { return };
+                    };
 
-                        let followeeToSet : Blob = switch (nodeMem.variables.followee) {
-                            case (#FolloweeId(followee)) { followee };
-                            case (_) { return };
+                    let neuron = SNS.Neuron({
+                        sns_canister_id = governanceCanister;
+                        neuron_id = id;
+                    });
+
+                    // Prepare the followees for each topic
+                    let topicFollowingArgs = [
+                        {
+                            topic = ?#DappCanisterManagement;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#DaoCommunitySettings;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#ApplicationBusinessLogic;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#CriticalDappOperations;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#TreasuryAssetManagement;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#Governance;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                        {
+                            topic = ?#SnsFrameworkManagement;
+                            followees = [{
+                                alias = null;
+                                neuron_id = ?{ id = followeeToSet };
+                            }];
+                        },
+                    ];
+
+                    switch (await* neuron.setFollowing({ followeesForTopic = topicFollowingArgs })) {
+                        case (#ok(_)) {
+                            NodeUtils.log_activity(nodeMem, "update_following", #Ok);
                         };
-
-                        switch (await* neuron.follow({ followee = followeeToSet; function_id = functionId })) {
-                            case (#ok(_)) {
-                                NodeUtils.log_activity(nodeMem, "update_followees", #Ok);
-                            };
-                            case (#err(err)) {
-                                NodeUtils.log_activity(nodeMem, "update_followees", #Err(debug_show err));
-                            };
+                        case (#err(err)) {
+                            NodeUtils.log_activity(nodeMem, "update_following", #Err(debug_show err));
                         };
                     };
                 };

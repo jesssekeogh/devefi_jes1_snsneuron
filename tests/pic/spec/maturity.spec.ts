@@ -41,9 +41,8 @@ describe("Maturity", () => {
   it("should accrue maturity", async () => {
     await snsNeuron.makeProposal();
 
-    await manager.advanceTime(7200); // 5 days in mins
-    await manager.advanceBlocks(10);
-
+    await manager.advanceBlocksAndTimeDays(4);
+    await manager.advanceBlocksAndTimeHours(3);
     node = await manager.getNode(node.id);
 
     expect(
@@ -76,6 +75,7 @@ describe("Maturity", () => {
     await manager.advanceBlocksAndTimeDays(8);
 
     node = await manager.getNode(node.id);
+
     expect(
       node.custom[0].devefi_jes1_snsneuron.neuron_cache[0]
         .disburse_maturity_in_progress.length

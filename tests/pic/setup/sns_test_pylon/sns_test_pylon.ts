@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { PocketIc } from "@hadronous/pic";
+import { PocketIc } from "@dfinity/pic";
 import { IDL } from "@dfinity/candid";
 import {
   _SERVICE as SNSTESTPYLON,
@@ -10,7 +10,7 @@ import {
 const WASM_PATH = resolve(__dirname, "../sns_test_pylon/sns_test_pylon.wasm.gz");
 
 export async function SnsTestPylon(pic: PocketIc) {
-  const subnets = pic.getApplicationSubnets();
+  const subnets = await pic.getApplicationSubnets();
 
   const fixture = await pic.setupCanister<SNSTESTPYLON>({
     idlFactory,

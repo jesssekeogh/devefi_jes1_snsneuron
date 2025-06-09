@@ -22,12 +22,7 @@ import {
   idlFactory as snswIdlFactory,
   SnsInitPayload,
 } from "./nns/snsw";
-import {
-  Actor,
-  PocketIc,
-  createIdentity,
-  SubnetStateType,
-} from "@hadronous/pic";
+import { Actor, PocketIc, createIdentity, SubnetStateType } from "@dfinity/pic";
 import { Principal } from "@dfinity/principal";
 import { SNSW_CANISTER_ID, GOVERNANCE_CANISTER_ID } from "./constants.ts";
 import { SnsTestPylon } from "./sns_test_pylon/sns_test_pylon.ts";
@@ -75,7 +70,6 @@ export class Manager {
         state: {
           type: SubnetStateType.FromPath,
           path: NNS_STATE_PATH,
-          subnetId: Principal.fromText(NNS_SUBNET_ID),
         },
       },
       application: [{ state: { type: SubnetStateType.New } }],
@@ -95,10 +89,13 @@ export class Manager {
     snswActor.setPrincipal(GOVERNANCE_CANISTER_ID);
     await pic.addCycles(SNSW_CANISTER_ID, 500000000000000);
 
+    const currentSubnet = await snswActor.get_sns_subnet_ids({});
+
     // remove nns subnet from possible deployments
+    let subnetToAdd = await pic.getSnsSubnet();
     await snswActor.update_sns_subnet_list({
-      sns_subnet_ids_to_add: [pic.getSnsSubnet().id],
-      sns_subnet_ids_to_remove: [Principal.fromText(NNS_SUBNET_ID)],
+      sns_subnet_ids_to_add: [subnetToAdd.id],
+      sns_subnet_ids_to_remove: [currentSubnet.sns_subnet_ids[0]],
     });
 
     return new Manager(

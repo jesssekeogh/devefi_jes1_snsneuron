@@ -1,5 +1,5 @@
 import { SnsInitPayload } from "../nns/snsw";
-import { generateRandomIdentity } from "@hadronous/pic";
+import { generateRandomIdentity } from "@dfinity/pic";
 
 // Change these to an identity used in the tests so the neuron can be transferred
 let developer2 = generateRandomIdentity().getPrincipal();

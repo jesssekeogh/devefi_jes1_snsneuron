@@ -74,9 +74,10 @@ actor class SNSTESTPYLON() = this {
 
     // Vector modules
     stable let mem_vec_snsneuron_1 = VecSnsNeuron.Mem.Vector.V1.new();
+    stable let mem_vec_snsneuron_2 = VecSnsNeuron.Mem.Vector.V2.upgrade(mem_vec_snsneuron_1);
 
     let devefi_jes1_snsneuron = VecSnsNeuron.Mod({
-        xmem = mem_vec_snsneuron_1;
+        xmem = mem_vec_snsneuron_2;
         core;
     });
 
