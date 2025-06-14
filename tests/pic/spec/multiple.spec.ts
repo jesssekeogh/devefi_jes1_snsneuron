@@ -191,6 +191,7 @@ describe("Multiple", () => {
     await snsNeuron2.makeProposal();
 
     await manager.advanceBlocksAndTimeDays(8);
+    await manager.advanceBlocksAndTimeHours(3);
 
     for (let { version, stakeSns, node } of allNodes) {
       node = await manager.getNode(node.id);
@@ -217,7 +218,8 @@ describe("Multiple", () => {
     }
 
     await manager.advanceBlocksAndTimeDays(8);
-
+    await manager.advanceBlocksAndTimeHours(3);
+    
     for (let { version, stakeSns, node } of allNodes) {
       node = await manager.getNode(node.id);
       expect(

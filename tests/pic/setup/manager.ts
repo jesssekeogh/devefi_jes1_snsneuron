@@ -28,6 +28,7 @@ import { SNSW_CANISTER_ID, GOVERNANCE_CANISTER_ID } from "./constants.ts";
 import { SnsTestPylon } from "./sns_test_pylon/sns_test_pylon.ts";
 import { NNS_STATE_PATH, NNS_SUBNET_ID } from "./constants.ts";
 import { SetupSns } from "./setupsns.ts";
+import Router from "./router/router.ts";
 
 interface NeuronParams {
   neuron_ledger_canister: Principal;
@@ -80,6 +81,13 @@ export class Manager {
     await pic.tick();
 
     let identity = createIdentity("superSecretAlicePassword");
+
+    // setup chrono router
+    // we are not testing the router here, but we need it to spin up a pylon
+    // pass time to allow router to setup slices
+    await Router(pic);
+    await pic.advanceTime(240 * 60 * 1000);
+    await pic.tick(240);
 
     // setup pylon
     let pylonFixture = await SnsTestPylon(pic);

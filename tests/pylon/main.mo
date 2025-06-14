@@ -9,6 +9,7 @@ import Ledgers "mo:devefi/ledgers";
 import ICRC55 "mo:devefi/ICRC55";
 import VecSnsNeuron "../../src";
 import Core "mo:devefi/core";
+import Chrono "mo:chronotrinite/client";
 
 actor class SNSTESTPYLON() = this {
 
@@ -28,15 +29,23 @@ actor class SNSTESTPYLON() = this {
         me_can;
     });
 
+    // chrono
+    stable let chrono_mem_v1 = Chrono.Mem.ChronoClient.V1.new({
+        router = Principal.fromText("tqzl2-p7777-77776-aaaaa-cai"); // test chronotrinite router
+    });
+
+    let chrono = Chrono.ChronoClient<system>({ xmem = chrono_mem_v1 });
+
     stable let dvf_mem_1 = Ledgers.Mem.Ledgers.V1.new();
 
-    let dvf = Ledgers.Ledgers<system>({ xmem = dvf_mem_1; me_can });
+    let dvf = Ledgers.Ledgers<system>({ xmem = dvf_mem_1; me_can; chrono });
 
     stable let mem_core_1 = Core.Mem.Core.V1.new();
 
     let sns_icrc_1 : Principal = Principal.fromText("75lp5-u7777-77776-qaaba-cai");
 
     let core = Core.Mod<system>({
+        _chrono = chrono;
         xmem = mem_core_1;
         settings = {
             PYLON_NAME = "Neuron";
@@ -46,7 +55,6 @@ actor class SNSTESTPYLON() = this {
                 min_create_balance = 50000000;
                 operation_cost = 20_000;
                 freezing_threshold_days = 10;
-                exempt_daily_cost_balance = null;
                 split = {
                     platform = 20;
                     pylon = 20;
@@ -68,7 +76,6 @@ actor class SNSTESTPYLON() = this {
             ALLOW_TEMP_NODE_CREATION = true;
         } : Core.SETTINGS;
         dvf;
-        chain;
         me_can;
     });
 
