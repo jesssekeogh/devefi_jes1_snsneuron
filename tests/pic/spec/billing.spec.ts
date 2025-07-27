@@ -36,6 +36,8 @@ describe("Billing", () => {
     expect(b.platform_billing).toBe(0n);
 
     await manager.advanceBlocksAndTimeDays(3);
+    await manager.advanceBlocksAndTimeMinutes(3);
+    
     let b2 = await manager.getBillingBalances(sns.getIcrcLedger());
 
     expect(b2.author_billing).toBeGreaterThan(0n);

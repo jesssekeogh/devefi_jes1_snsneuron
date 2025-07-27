@@ -1,6 +1,6 @@
 [package]
 name = "devefi-jes1-snsneuron"
-version = "0.2.0"
+version = "0.2.1"
 description = "Stake SNS neurons and receive maturity directly to your destination"
 repository = "https://github.com/jesssekeogh/devefi_jes1_snsneuron"
 keywords = [ "devefi", "neuron", "stake", "sns" ]
@@ -12,4 +12,4 @@ map = "9.0.1"
 neuro = "0.7.6"
 
 [dev-dependencies]
-devefi = "0.4.0"
+devefi = "2.0.5"

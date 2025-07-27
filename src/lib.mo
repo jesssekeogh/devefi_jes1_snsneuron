@@ -71,7 +71,7 @@ module {
                 author = "jes1";
                 description = "Stake SNS neurons and receive maturity directly to your destination";
                 supported_ledgers = []; // all pylon ledgers
-                version = #beta([0, 2, 0]);
+                version = #beta([0, 2, 1]);
                 create_allowed = true;
                 ledger_slots = [
                     "Neuron"
@@ -140,11 +140,12 @@ module {
                     // Proceed to send ICP to the neuron's subaccount
                     let #ok(intent) = core.Source.Send.intent(
                         sourceStake,
-                        #external_account({
+                        #external_account(#icrc({
                             owner = governanceCanister;
                             subaccount = ?neuronSubaccount;
-                        }),
+                        })),
                         stakeBal,
+                        null,
                     ) else return;
 
                     let txId = core.Source.Send.commit(intent);
@@ -161,6 +162,7 @@ module {
                     sourceMaturity,
                     #destination({ port = 0 }),
                     maturityBal,
+                    null,
                 ) else return;
 
                 ignore core.Source.Send.commit(intent);

@@ -73,7 +73,8 @@ describe("Maturity", () => {
     let oldBalance = await manager.getMyBalances(sns.getIcrcLedger());
 
     await manager.advanceBlocksAndTimeDays(8);
-
+    await manager.advanceBlocksAndTimeMinutes(3);
+    
     node = await manager.getNode(node.id);
 
     expect(
@@ -88,6 +89,7 @@ describe("Maturity", () => {
     await snsNeuron.makeProposal();
 
     await manager.advanceBlocksAndTimeDays(8);
+    await manager.advanceBlocksAndTimeMinutes(3);
 
     node = await manager.getNode(node.id);
 
@@ -99,6 +101,7 @@ describe("Maturity", () => {
     let oldBalance = await manager.getMyBalances(sns.getIcrcLedger());
 
     await manager.advanceBlocksAndTimeDays(8);
+    await manager.advanceBlocksAndTimeMinutes(3);
 
     node = await manager.getNode(node.id);
     expect(

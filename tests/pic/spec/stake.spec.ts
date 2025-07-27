@@ -107,7 +107,7 @@ describe("Stake", () => {
       [{ FolloweeId: MOCK_FOLLOWEE_TO_SET_2 }],
       []
     );
-    await manager.advanceBlocksAndTimeMinutes(3);
+    await manager.advanceBlocksAndTimeMinutes(5);
     node = await manager.getNode(node.id);
 
     expect(

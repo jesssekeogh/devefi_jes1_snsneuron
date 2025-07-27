@@ -164,12 +164,19 @@ export class Manager {
   }
 
   // used for when a refresh is pending on a node
-  public async advanceBlocksAndTimeMinutes(rounds: number): Promise<void> {
-    let mins = 10; // 10 mins
-    let blocks = 10;
+  public async advanceBlocksAndTimeMinutes(mins: number): Promise<void> {
+    const totalSeconds = mins * 60;
+    const intervalSeconds = 20;
+    const blocksPerInterval = 20; // 1 block per second for 20 seconds
+    const rounds = Math.ceil(totalSeconds / intervalSeconds);
+
     for (let i = 0; i < rounds; i++) {
-      await this.pic.advanceTime(mins * 60 * 1000);
-      await this.pic.tick(blocks);
+      const timeToAdvance = Math.min(
+        intervalSeconds,
+        totalSeconds - i * intervalSeconds
+      );
+      await this.pic.advanceTime(timeToAdvance * 1000);
+      await this.pic.tick(blocksPerInterval);
     }
   }
 
